@@ -1,0 +1,4 @@
+nanobot-ai
+django
+django-cors-headers
+python-dotenv
