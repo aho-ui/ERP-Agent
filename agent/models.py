@@ -21,7 +21,7 @@ class AgentTemplate(models.Model):
         return self.name
 
 
-class AuditLog(models.Model):
+class AgentAction(models.Model):
     class Status(models.TextChoices):
         SUCCESS = "success", "Success"
         FAILED = "failed", "Failed"
@@ -53,7 +53,7 @@ class OutputArtifact(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="artifacts")
-    audit_log = models.ForeignKey("AuditLog", on_delete=models.SET_NULL, null=True, blank=True, related_name="artifacts")
+    audit_log = models.ForeignKey("AgentAction", on_delete=models.SET_NULL, null=True, blank=True, related_name="artifacts")
     type = models.CharField(max_length=20, choices=Type.choices)
     format = models.CharField(max_length=50)
     storage_path = models.CharField(max_length=500)
