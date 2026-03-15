@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.env
+memory/
+.credentials/
+.context/
+.claude/
+.sketch/
+frontend/node_modules/
+frontend/.next/
