@@ -18,7 +18,7 @@ _RESPONSE_FORMAT = (
 
 _WRITE_FORMAT = (
     "\nFor write operations (any create_* tool): first gather all required data using read tools, "
-    "then STOP and return {\"confirmation_required\": true, \"summary\": \"<one sentence with all key details of what will be created>\"} "
+    "then STOP and return {\"confirmation_required\": true, \"summary\": \"<one sentence starting with 'Awaiting confirmation to create...' with all key details>\"} "
     "WITHOUT calling the write tool. Only call the write tool if the task explicitly contains the word 'CONFIRMED'."
 )
 

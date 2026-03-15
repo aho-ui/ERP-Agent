@@ -1,11 +1,12 @@
 import json
+import os
 import xmlrpc.client
 from mcp.server.fastmcp import FastMCP
 
-URL = "http://localhost:8069"
-DB = "odoo_dev_18"
-USERNAME = "admin"
-PASSWORD = "admin"
+URL = os.environ.get("ODOO_URL", "http://localhost:8069")
+DB = os.environ.get("ODOO_DB", "odoo_dev_18")
+USERNAME = os.environ.get("ODOO_USER", "admin")
+PASSWORD = os.environ.get("ODOO_PASSWORD", "admin")
 
 mcp = FastMCP("odoo")
 
@@ -23,16 +24,19 @@ def execute(uid, models, model, method, args, kwargs=None):
     return models.execute_kw(DB, uid, PASSWORD, model, method, args, kwargs or {})
 
 
-def build_domain(base: list, search: str, field: str = "name") -> list:
+def build_domain(base: list, search: str, field: str = "name", record_id: int = 0) -> list:
+    domain = base[:]
+    if record_id:
+        domain.append(["id", "=", record_id])
     if search:
-        return [base + [[field, "ilike", search]]]
-    return [base]
+        domain.append([field, "ilike", search])
+    return [domain]
 
 
 @mcp.tool()
-def get_sales_orders(limit: int = 10, search: str = "") -> str:
+def get_sales_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
     uid, models = connect()
-    domain = build_domain([], search)
+    domain = build_domain([], search, record_id=id)
     orders = execute(uid, models, "sale.order", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "date_order", "amount_total", "state"],
         "limit": limit,
@@ -42,9 +46,9 @@ def get_sales_orders(limit: int = 10, search: str = "") -> str:
 
 
 @mcp.tool()
-def get_customers(limit: int = 10, search: str = "") -> str:
+def get_customers(limit: int = 10, search: str = "", id: int = 0) -> str:
     uid, models = connect()
-    domain = build_domain([["is_company", "=", True]], search)
+    domain = build_domain([["is_company", "=", True]], search, record_id=id)
     customers = execute(uid, models, "res.partner", "search_read", domain, {
         "fields": ["id", "name", "email", "phone", "customer_rank"],
         "limit": limit,
@@ -53,9 +57,9 @@ def get_customers(limit: int = 10, search: str = "") -> str:
 
 
 @mcp.tool()
-def get_vendors(limit: int = 10, search: str = "") -> str:
+def get_vendors(limit: int = 10, search: str = "", id: int = 0) -> str:
     uid, models = connect()
-    domain = build_domain([["supplier_rank", ">", 0]], search)
+    domain = build_domain([["supplier_rank", ">", 0]], search, record_id=id)
     vendors = execute(uid, models, "res.partner", "search_read", domain, {
         "fields": ["id", "name", "email", "phone", "supplier_rank"],
         "limit": limit,
@@ -64,20 +68,20 @@ def get_vendors(limit: int = 10, search: str = "") -> str:
 
 
 @mcp.tool()
-def get_products(limit: int = 10, search: str = "") -> str:
+def get_products(limit: int = 10, search: str = "", id: int = 0) -> str:
     uid, models = connect()
-    domain = build_domain([["sale_ok", "=", True]], search)
+    domain = build_domain([["sale_ok", "=", True]], search, record_id=id)
     products = execute(uid, models, "product.product", "search_read", domain, {
-        "fields": ["id", "name", "list_price", "type", "default_code"],
+        "fields": ["id", "name", "list_price", "standard_price", "type", "default_code"],
         "limit": limit,
     })
     return json.dumps(products)
 
 
 @mcp.tool()
-def get_purchase_orders(limit: int = 10, search: str = "") -> str:
+def get_purchase_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
     uid, models = connect()
-    domain = build_domain([], search)
+    domain = build_domain([], search, record_id=id)
     orders = execute(uid, models, "purchase.order", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "date_order", "amount_total", "state"],
         "limit": limit,
@@ -87,9 +91,9 @@ def get_purchase_orders(limit: int = 10, search: str = "") -> str:
 
 
 @mcp.tool()
-def get_invoices(limit: int = 10, search: str = "") -> str:
+def get_invoices(limit: int = 10, search: str = "", id: int = 0) -> str:
     uid, models = connect()
-    domain = build_domain([["move_type", "=", "out_invoice"]], search)
+    domain = build_domain([["move_type", "=", "out_invoice"]], search, record_id=id)
     invoices = execute(uid, models, "account.move", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "invoice_date", "amount_total", "state", "payment_state"],
         "limit": limit,
@@ -99,9 +103,9 @@ def get_invoices(limit: int = 10, search: str = "") -> str:
 
 
 @mcp.tool()
-def get_vendor_bills(limit: int = 10, search: str = "") -> str:
+def get_vendor_bills(limit: int = 10, search: str = "", id: int = 0) -> str:
     uid, models = connect()
-    domain = build_domain([["move_type", "=", "in_invoice"]], search)
+    domain = build_domain([["move_type", "=", "in_invoice"]], search, record_id=id)
     bills = execute(uid, models, "account.move", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "invoice_date", "amount_total", "state", "payment_state"],
         "limit": limit,
@@ -111,27 +115,29 @@ def get_vendor_bills(limit: int = 10, search: str = "") -> str:
 
 
 @mcp.tool()
-def create_sales_order(partner_id: int, product_id: int, quantity: float, price_unit: float) -> str:
+def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str:
     uid, models = connect()
+    product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["list_price"]})[0]
     order_id = execute(uid, models, "sale.order", "create", [{"partner_id": partner_id}])
     execute(uid, models, "sale.order.line", "create", [{
         "order_id": order_id,
         "product_id": product_id,
         "product_uom_qty": quantity,
-        "price_unit": price_unit,
+        "price_unit": product["list_price"],
     }])
     return json.dumps({"order_id": order_id})
 
 
 @mcp.tool()
-def create_purchase_order(vendor_id: int, product_id: int, quantity: float, price_unit: float) -> str:
+def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> str:
     uid, models = connect()
+    product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["standard_price"]})[0]
     order_id = execute(uid, models, "purchase.order", "create", [{"partner_id": vendor_id}])
     execute(uid, models, "purchase.order.line", "create", [{
         "order_id": order_id,
         "product_id": product_id,
         "product_qty": quantity,
-        "price_unit": price_unit,
+        "price_unit": product["standard_price"],
     }])
     execute(uid, models, "purchase.order", "button_confirm", [[order_id]])
     return json.dumps({"order_id": order_id})

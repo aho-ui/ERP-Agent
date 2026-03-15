@@ -1,6 +1,5 @@
 import asyncio
 import json
-from contextvars import ContextVar
 from typing import Any
 import litellm
 
@@ -17,20 +16,7 @@ from agent.utils.parsing import parse_agent_response
 _agent_loop: AgentLoop | None = None
 _task_queues: dict[int, asyncio.Queue] = {}
 
-_user_role: ContextVar[str] = ContextVar("user_role", default="viewer")
-_user_id: ContextVar[str | None] = ContextVar("user_id", default=None)
-
-WRITE_TOOLS = {
-    "mcp_odoo_create_sales_order",
-    "mcp_odoo_create_purchase_order",
-    "mcp_odoo_create_customer_invoice",
-}
-
-TOOL_GUARDRAILS: dict[str, dict] = {
-    "mcp_odoo_create_sales_order":      {"max_quantity": 1000},
-    "mcp_odoo_create_purchase_order":   {"max_quantity": 1000},
-    "mcp_odoo_create_customer_invoice": {"max_quantity": 1000, "max_unit_price": 100_000},
-}
+GROQ_MODEL = "groq/llama-3.3-70b-versatile"
 
 
 class DispatchTool(Tool):
@@ -72,26 +58,14 @@ class DispatchTool(Tool):
 
     async def execute(self, agent_name: str, task: str) -> str:
         from agent.framework.agents import AGENTS
-        from agent.models import AgentAction, AgentTemplate
+        from agent.models import AgentAction
 
-        db_template = await AgentTemplate.objects.filter(name=agent_name, is_active=True).afirst()
-        if db_template:
-            template = {"name": db_template.name, "system_prompt": db_template.instructions, "allowed_tools": db_template.allowed_tools}
-        else:
-            template = next((a for a in AGENTS if a["name"] == agent_name), None)
+        template = next((a for a in AGENTS if a["name"] == agent_name), None)
         if not template:
-            builtin_names = [a["name"] for a in AGENTS]
-            db_names = [t async for t in AgentTemplate.objects.filter(is_active=True).values_list("name", flat=True)]
-            return f"Error: No agent named '{agent_name}'. Available: {list(set(builtin_names + db_names))}"
-
-        role = _user_role.get()
-        if role == "viewer":
-            blocked = set(template["allowed_tools"]) & WRITE_TOOLS
-            if blocked:
-                return f"Access denied: your role (viewer) cannot perform write operations."
+            names = [a["name"] for a in AGENTS]
+            return f"Error: No agent named '{agent_name}'. Available: {names}"
 
         action = await AgentAction.objects.acreate(
-            user_id=_user_id.get(),
             intent=task[:500],
             agent_name=agent_name,
             tool_called="",
@@ -146,28 +120,7 @@ class DispatchTool(Tool):
                     for tc in msg.tool_calls:
                         tool = filtered.get(tc.function.name)
                         if tool:
-                            kwargs = json.loads(tc.function.arguments)
-                            guardrail = TOOL_GUARDRAILS.get(tc.function.name, {})
-                            violation = None
-                            if "max_quantity" in guardrail and kwargs.get("quantity", 0) > guardrail["max_quantity"]:
-                                violation = f"Guardrail violated: quantity {kwargs['quantity']} exceeds limit {guardrail['max_quantity']}."
-                            if "max_unit_price" in guardrail and kwargs.get("price_unit", 0) > guardrail["max_unit_price"]:
-                                violation = f"Guardrail violated: price_unit {kwargs['price_unit']} exceeds limit {guardrail['max_unit_price']}."
-                            if violation:
-                                await AgentAction.objects.filter(id=action.id).aupdate(
-                                    status=AgentAction.Status.FAILED,
-                                    output={"error": violation},
-                                )
-                                return violation
-                            result = await tool.execute(**kwargs)
-                            if tc.function.name in WRITE_TOOLS:
-                                try:
-                                    ref_data = json.loads(result)
-                                    ref = str(ref_data.get("order_id") or ref_data.get("invoice_id") or "")
-                                    if ref:
-                                        await AgentAction.objects.filter(id=action.id).aupdate(erp_record_ref=ref)
-                                except Exception:
-                                    pass
+                            result = await tool.execute(**json.loads(tc.function.arguments))
                         else:
                             result = f"Error: Tool '{tc.function.name}' not available for {agent_name}"
                         messages.append({
@@ -232,11 +185,10 @@ def get_agent_loop() -> AgentLoop:
     global _agent_loop
     if _agent_loop is None:
         config = load_config()
-        provider_cfg = config.get_provider()
         provider = LiteLLMProvider(
-            api_key=provider_cfg.api_key if provider_cfg else None,
-            api_base=provider_cfg.api_base if provider_cfg else None,
-            default_model=config.agents.defaults.model,
+            api_key=None,
+            api_base=None,
+            default_model=GROQ_MODEL,
         )
         bus = MessageBus()
         workspace = config.workspace_path
@@ -257,15 +209,12 @@ def get_agent_loop() -> AgentLoop:
         dispatch_tool = DispatchTool(
             provider=provider,
             registry=_agent_loop.tools,
-            model=config.agents.defaults.model,
-            temperature=config.agents.defaults.temperature,
-            max_tokens=config.agents.defaults.max_tokens,
+            model=GROQ_MODEL,
+            temperature=0.0,
+            max_tokens=4096,
         )
         _agent_loop.tools.register(dispatch_tool)
 
-        # Supervisor must never call MCP tools directly — dispatch only.
-        # Patch get_definitions to hide mcp_* tools from the supervisor's LLM call.
-        # The tools remain registered so DispatchTool can still access them.
         _orig_defs = _agent_loop.tools.get_definitions
         _agent_loop.tools.get_definitions = lambda: [
             d for d in _orig_defs()
