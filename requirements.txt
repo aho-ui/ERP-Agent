@@ -2,3 +2,5 @@ nanobot-ai
 django
 django-cors-headers
 python-dotenv
+reportlab
+djangorestframework-simplejwt
