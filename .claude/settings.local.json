@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(python -c:*)",
+      "Bash(python manage.py migrate agent)",
+      "Bash(.venv/Scripts/python -c \"import reportlab; print\\(reportlab.Version\\)\")",
+      "WebSearch",
+      "Read(//c/Users/ac3m1/Users/ac3m1/.nanobot/workspace/**)",
+      "Read(//c/Users/ac3m1/.nanobot/workspace/**)"
+    ]
+  }
+}
