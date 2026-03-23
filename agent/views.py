@@ -156,12 +156,10 @@ async def pending_actions(_request):
 
 
 async def agent_logs(request):
-    uid, _, err = _require_auth(request)
+    _, _, err = _require_auth(request, admin_only=True)
     if err:
         return err
     qs = AgentAction.objects.order_by("-timestamp")
-    if uid:
-        qs = qs.filter(user_id=uid)
 
     rows = qs.values(
         "id", "intent", "agent_name", "tool_called", "status", "timestamp", "output", "artifacts"
@@ -255,6 +253,36 @@ async def available_tools(_request):
     for a in AGENTS:
         tools.update(a["allowed_tools"])
     return JsonResponse(sorted(tools), safe=False)
+
+
+@csrf_exempt
+@require_POST
+async def export_csv(request):
+    _, _, err = _require_auth(request)
+    if err:
+        return err
+    from agent.utils.csv_export import generate_csv_bytes
+    body = json.loads(request.body)
+    data = generate_csv_bytes(body["columns"], body["rows"])
+    from django.http import HttpResponse
+    response = HttpResponse(data, content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{body.get("title", "export")}.csv"'
+    return response
+
+
+@csrf_exempt
+@require_POST
+async def export_pdf(request):
+    _, _, err = _require_auth(request)
+    if err:
+        return err
+    from agent.utils.pdf import generate_pdf_bytes
+    body = json.loads(request.body)
+    data = generate_pdf_bytes(body["columns"], body["rows"], title=body.get("title", ""))
+    from django.http import HttpResponse
+    response = HttpResponse(data, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{body.get("title", "export")}.pdf"'
+    return response
 
 
 async def mcp_health(_request):
