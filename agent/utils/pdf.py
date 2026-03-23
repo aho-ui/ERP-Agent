@@ -1,4 +1,3 @@
-import base64
 import io
 
 from reportlab.lib import colors
@@ -7,7 +6,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 
 
-def generate_pdf_base64(columns: list, rows: list, title: str = "") -> str:
+def generate_pdf_bytes(columns: list, rows: list, title: str = "") -> bytes:
     buf = io.BytesIO()
     page = landscape(A4) if len(columns) > 6 else A4
     doc = SimpleDocTemplate(buf, pagesize=page, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
@@ -42,4 +41,10 @@ def generate_pdf_base64(columns: list, rows: list, title: str = "") -> str:
 
     doc.build(elements)
     buf.seek(0)
-    return "data:application/pdf;base64," + base64.b64encode(buf.read()).decode()
+    return buf.read()
+
+
+# def generate_pdf_base64(columns: list, rows: list, title: str = "") -> str:
+#     import base64
+#     data = generate_pdf_bytes(columns, rows, title=title)
+#     return "data:application/pdf;base64," + base64.b64encode(data).decode()
