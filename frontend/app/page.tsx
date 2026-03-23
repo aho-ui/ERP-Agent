@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
-type TableArtifact = { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string; csv_data?: string; pdf_data?: string };
-type ChartArtifact = { artifact_type: "chart"; image: string; title: string };
+type TableArtifact = { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string };
+type ChartArtifact = { artifact_type: "chart"; chart_type: "bar" | "line" | "pie"; title: string; x_key?: string; series?: { key: string; label: string }[]; data: Record<string, unknown>[] };
 type Artifact = TableArtifact | ChartArtifact;
 type Message = { role: "user" | "assistant"; content: string; steps?: string[]; artifacts?: Artifact[] };
 type Tab = { id: string; label: string; messages: Message[] };
@@ -43,6 +44,50 @@ function renderMarkdown(text: string) {
   ));
 }
 
+
+const CHART_COLORS = ["#6366f1", "#22d3ee", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
+
+function ChartWidget({ artifact }: { artifact: ChartArtifact }) {
+  const { chart_type, data, x_key, series } = artifact;
+  if (chart_type === "pie") {
+    return (
+      <ResponsiveContainer width="100%" height={260}>
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+            {data.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+          </Pie>
+          <Tooltip />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+  if (chart_type === "line") {
+    return (
+      <ResponsiveContainer width="100%" height={260}>
+        <LineChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis dataKey={x_key} tick={{ fontSize: 10, fill: "#9ca3af" }} />
+          <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
+          <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "none", fontSize: 11 }} />
+          {series && series.length > 0 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+          {(series ?? []).map((s, i) => <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={CHART_COLORS[i % CHART_COLORS.length]} dot={false} />)}
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <XAxis dataKey={x_key} tick={{ fontSize: 10, fill: "#9ca3af" }} />
+        <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
+        <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "none", fontSize: 11 }} />
+        {series && series.length > 0 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+        {(series ?? []).map((s, i) => <Bar key={s.key} dataKey={s.key} name={s.label} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
 
 const _blank = newTab(1);
 
@@ -83,6 +128,21 @@ export default function Page() {
   function authHeader() {
     const token = localStorage.getItem("access_token") ?? "";
     return { "Authorization": `Bearer ${token}` };
+  }
+
+  async function downloadExport(type: "csv" | "pdf", artifact: TableArtifact) {
+    const res = await fetch(`${BACKEND}/api/agent/export/${type}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ columns: artifact.columns, rows: artifact.rows, title: artifact.title ?? "" }),
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${artifact.title || "export"}.${type}`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function logout() {
@@ -290,9 +350,15 @@ export default function Page() {
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-100">
       <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 text-xs shrink-0">
-        <Link href="/logs" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Logs</Link>
-        <span className="text-gray-700">|</span>
         <Link href="/agents" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Agents</Link>
+        {userRole === "admin" && (
+          <>
+            <span className="text-gray-700">|</span>
+            <Link href="/logs" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Logs</Link>
+            <span className="text-gray-700">|</span>
+            <Link href="/users" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Users</Link>
+          </>
+        )}
         <span className="text-gray-700">|</span>
         <span className="text-gray-500 font-medium">MCP Servers</span>
         {mcpServers.map((s) => (
@@ -400,32 +466,15 @@ export default function Page() {
                 <div key={ai} className="max-w-[90%] mt-2 rounded-lg border border-gray-700">
                   {artifact.artifact_type === "chart" && (
                     <div className="p-3">
-                      <div className="flex justify-end mb-2">
-                        <a
-                          href={artifact.image}
-                          download={artifact.title ? `${artifact.title}.png` : "chart.png"}
-                          className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
-                        >
-                          Download PNG
-                        </a>
-                      </div>
-                      {artifact.title && <p className="text-xs text-gray-400 mb-2">{artifact.title}</p>}
-                      <img src={artifact.image} alt={artifact.title} className="w-full rounded" />
+                      {artifact.title && <p className="text-xs text-gray-400 mb-3">{artifact.title}</p>}
+                      <ChartWidget artifact={artifact} />
                     </div>
                   )}
                   {artifact.artifact_type === "table" && (
                     <>
                     <div className="flex justify-end gap-3 px-3 py-1.5 border-b border-gray-700">
-                      {artifact.csv_data && (
-                        <a href={artifact.csv_data} download={artifact.title ? `${artifact.title}.csv` : "export.csv"} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">
-                          Download CSV
-                        </a>
-                      )}
-                      {artifact.pdf_data && (
-                        <a href={artifact.pdf_data} download={artifact.title ? `${artifact.title}.pdf` : "export.pdf"} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">
-                          Download PDF
-                        </a>
-                      )}
+                      <button onClick={() => downloadExport("csv", artifact)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download CSV</button>
+                      <button onClick={() => downloadExport("pdf", artifact)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download PDF</button>
                     </div>
                     <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left text-gray-300">

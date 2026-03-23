@@ -3,12 +3,13 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const BACKEND = "http://localhost:8000";
 
 type ArtifactItem =
-  | { artifact_type: "table"; columns: string[]; rows: unknown[][] }
-  | { artifact_type: "chart"; image: string; title: string }
+  | { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string }
+  | { artifact_type: "chart"; chart_type: "bar" | "line" | "pie"; title: string; x_key?: string; series?: { key: string; label: string }[]; data: Record<string, unknown>[] }
   | { artifact_type: string; [key: string]: unknown };
 
 type LogRow = {
@@ -28,15 +29,75 @@ const STATUS_STYLES: Record<string, string> = {
   pending: "text-yellow-400",
 };
 
+const CHART_COLORS = ["#6366f1", "#22d3ee", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
+
+function LogChartWidget({ artifact }: { artifact: Extract<ArtifactItem, { artifact_type: "chart" }> }) {
+  const { chart_type, data, x_key, series } = artifact;
+  if (chart_type === "pie") {
+    return (
+      <ResponsiveContainer width="100%" height={220}>
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+            {data.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+          </Pie>
+          <Tooltip />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+  if (chart_type === "line") {
+    return (
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis dataKey={x_key} tick={{ fontSize: 10, fill: "#9ca3af" }} />
+          <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
+          <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "none", fontSize: 11 }} />
+          {series && series.length > 0 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+          {(series ?? []).map((s, i) => <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={CHART_COLORS[i % CHART_COLORS.length]} dot={false} />)}
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <XAxis dataKey={x_key} tick={{ fontSize: 10, fill: "#9ca3af" }} />
+        <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
+        <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "none", fontSize: 11 }} />
+        {series && series.length > 0 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+        {(series ?? []).map((s, i) => <Bar key={s.key} dataKey={s.key} name={s.label} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+async function downloadExport(type: "csv" | "pdf", artifact: Extract<ArtifactItem, { artifact_type: "table" }>) {
+  const token = localStorage.getItem("access_token") ?? "";
+  const res = await fetch(`${BACKEND}/api/agent/export/${type}/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify({ columns: artifact.columns, rows: artifact.rows, title: artifact.title ?? "" }),
+  });
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${artifact.title || "export"}.${type}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function LogsPage() {
   const router = useRouter();
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<{ image: string; title: string } | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { router.replace("/login"); return; }
+    if (localStorage.getItem("user_role") !== "admin") { router.replace("/"); return; }
     fetch(`${BACKEND}/api/agent/logs/`, { headers: { "Authorization": `Bearer ${token}` } })
       .then((r) => r.json())
       .then(setLogs)
@@ -110,53 +171,40 @@ export default function LogsPage() {
                           <div className="space-y-3">
                             {log.artifacts.map((artifact, ai) => (
                               <div key={ai} className="rounded border border-gray-700">
-                                {artifact.artifact_type === "chart" && (
-                                  <div className="p-2 flex items-start gap-3">
-                                    <img
-                                      src={(artifact as { artifact_type: "chart"; image: string; title: string }).image}
-                                      alt={(artifact as { artifact_type: "chart"; image: string; title: string }).title}
-                                      className="w-64 rounded shrink-0 cursor-zoom-in"
-                                      onClick={() => setLightbox({ image: (artifact as { artifact_type: "chart"; image: string; title: string }).image, title: (artifact as { artifact_type: "chart"; image: string; title: string }).title })}
-                                    />
-                                    <div className="flex flex-col gap-1 pt-1">
-                                      {(artifact as { artifact_type: "chart"; image: string; title: string }).title && (
-                                        <p className="text-xs text-gray-300">{(artifact as { artifact_type: "chart"; image: string; title: string }).title}</p>
-                                      )}
-                                      <a
-                                        href={(artifact as { artifact_type: "chart"; image: string; title: string }).image}
-                                        download={(artifact as { artifact_type: "chart"; image: string; title: string }).title || "chart.png"}
-                                        className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-                                      >
-                                        Download PNG
-                                      </a>
-                                    </div>
-                                  </div>
-                                )}
-                                {artifact.artifact_type === "table" && (() => {
-                                  const t = artifact as { artifact_type: "table"; columns: string[]; rows: unknown[][] };
+                                {artifact.artifact_type === "chart" && (() => {
+                                  const a = artifact as Extract<ArtifactItem, { artifact_type: "chart" }>;
                                   return (
+                                    <div className="p-3">
+                                      {a.title && <p className="text-xs text-gray-400 mb-2">{a.title}</p>}
+                                      <LogChartWidget artifact={a} />
+                                    </div>
+                                  );
+                                })()}
+                                {artifact.artifact_type === "table" && (() => {
+                                  const t = artifact as Extract<ArtifactItem, { artifact_type: "table" }>;
+                                  return (
+                                    <>
+                                    <div className="flex justify-end gap-3 px-3 py-1.5 border-b border-gray-700">
+                                      <button onClick={() => downloadExport("csv", t)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download CSV</button>
+                                      <button onClick={() => downloadExport("pdf", t)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download PDF</button>
+                                    </div>
                                     <div className="overflow-x-auto">
                                       <table className="w-full text-xs text-left text-gray-300">
                                         <thead className="bg-gray-800 text-gray-400 uppercase">
-                                          <tr>
-                                            {t.columns.map((col) => (
-                                              <th key={col} className="px-3 py-2 font-medium whitespace-nowrap">{col}</th>
-                                            ))}
-                                          </tr>
+                                          <tr>{t.columns.map((col) => <th key={col} className="px-3 py-2 font-medium whitespace-nowrap">{col}</th>)}</tr>
                                         </thead>
                                         <tbody>
                                           {t.rows.map((row, ri) => (
                                             <tr key={ri} className="border-t border-gray-700">
                                               {(row as unknown[]).map((cell, ci) => (
-                                                <td key={ci} className="px-3 py-2 whitespace-nowrap">
-                                                  {cell === null || cell === undefined ? "—" : String(cell)}
-                                                </td>
+                                                <td key={ci} className="px-3 py-2 whitespace-nowrap">{cell === null || cell === undefined ? "—" : String(cell)}</td>
                                               ))}
                                             </tr>
                                           ))}
                                         </tbody>
                                       </table>
                                     </div>
+                                    </>
                                   );
                                 })()}
                               </div>
@@ -173,23 +221,6 @@ export default function LogsPage() {
         </div>
       </div>
 
-      {lightbox && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6"
-          onClick={() => setLightbox(null)}
-        >
-          <div className="max-w-4xl w-full" onClick={(e) => e.stopPropagation()}>
-            {lightbox.title && <p className="text-xs text-gray-400 mb-2">{lightbox.title}</p>}
-            <img src={lightbox.image} alt={lightbox.title} className="w-full rounded" />
-            <button
-              className="mt-3 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-              onClick={() => setLightbox(null)}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
