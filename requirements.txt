@@ -4,3 +4,8 @@ django-cors-headers
 python-dotenv
 reportlab
 djangorestframework-simplejwt
+aiohttp
+botbuilder-core
+botbuilder-integration-aiohttp
+python-telegram-bot
+discord.py
