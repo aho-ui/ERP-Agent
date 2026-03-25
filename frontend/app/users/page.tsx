@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 
 const BACKEND = "http://localhost:8000";
 
-const ROLES = ["viewer", "operator", "admin"];
+const ROLES = ["viewer", "operator", "admin", "bot"];
 
 const ROLE_STYLES: Record<string, string> = {
   admin: "bg-purple-900/50 text-purple-300",
   operator: "bg-blue-900/50 text-blue-300",
   viewer: "bg-gray-800 text-gray-400",
+  bot: "bg-yellow-900/50 text-yellow-300",
 };
 
 type UserRow = {
@@ -23,9 +24,9 @@ type UserRow = {
   created_at: string;
 };
 
-type FormState = { username: string; email: string; password: string; role: string };
+type FormState = { username: string; email: string; password: string; role: string; expires_days: string };
 
-const emptyForm: FormState = { username: "", email: "", password: "", role: "viewer" };
+const emptyForm: FormState = { username: "", email: "", password: "", role: "viewer", expires_days: "" };
 
 export default function UsersPage() {
   const router = useRouter();
@@ -34,6 +35,7 @@ export default function UsersPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
 
   function token() {
     return localStorage.getItem("access_token") ?? "";
@@ -57,13 +59,17 @@ export default function UsersPage() {
   }, []);
 
   async function createUser() {
-    if (!form.username || !form.password) { setFormError("Username and password are required."); return; }
+    if (!form.username) { setFormError("Username is required."); return; }
+    if (form.role !== "bot" && !form.password) { setFormError("Password is required."); return; }
     setSaving(true);
     setFormError("");
+    const payload: Record<string, unknown> = { username: form.username, email: form.email, role: form.role };
+    if (form.role !== "bot") payload.password = form.password;
+    if (form.role === "bot" && form.expires_days) payload.expires_days = parseInt(form.expires_days);
     const res = await fetch(`${BACKEND}/api/users/`, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
     if (!res.ok) {
@@ -71,18 +77,32 @@ export default function UsersPage() {
       setFormError(data.error ?? "Failed to create user.");
       return;
     }
+    const data = await res.json();
+    if (data.api_key) setNewApiKey(data.api_key);
     setForm(emptyForm);
     setFormOpen(false);
     fetchUsers();
   }
 
   async function updateUser(id: string, patch: Partial<UserRow>) {
-    await fetch(`${BACKEND}/api/users/${id}/`, {
+    const res = await fetch(`${BACKEND}/api/users/${id}/`, {
       method: "PUT",
       headers: authHeaders(),
       body: JSON.stringify(patch),
     });
+    const data = await res.json();
+    if (data.api_key) setNewApiKey(data.api_key);
     fetchUsers();
+  }
+
+  async function regenerateKey(id: string) {
+    const res = await fetch(`${BACKEND}/api/users/${id}/`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ regenerate_key: true }),
+    });
+    const data = await res.json();
+    if (data.api_key) setNewApiKey(data.api_key);
   }
 
   async function deleteUser(id: string) {
@@ -106,6 +126,17 @@ export default function UsersPage() {
         </div>
       </div>
 
+      {newApiKey && (
+        <div className="px-6 py-3 border-b border-yellow-800 bg-yellow-900/20">
+          <p className="text-xs text-yellow-300 font-medium mb-1">API Key (shown once — copy now)</p>
+          <div className="flex items-center gap-3">
+            <code className="text-xs font-mono text-yellow-200 bg-gray-900 px-3 py-1.5 rounded flex-1 break-all">{newApiKey}</code>
+            <button onClick={() => { navigator.clipboard.writeText(newApiKey); }} className="text-xs text-yellow-400 hover:text-yellow-200 whitespace-nowrap">Copy</button>
+            <button onClick={() => setNewApiKey(null)} className="text-xs text-gray-500 hover:text-gray-300">Dismiss</button>
+          </div>
+        </div>
+      )}
+
       {formOpen && (
         <div className="px-6 py-4 border-b border-gray-800 bg-gray-900/50">
           <div className="max-w-lg space-y-3">
@@ -124,20 +155,32 @@ export default function UsersPage() {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500"
               />
-              <input
-                placeholder="Password"
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500"
-              />
+              {form.role !== "bot" && (
+                <input
+                  placeholder="Password"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500"
+                />
+              )}
               <select
                 value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                onChange={(e) => setForm({ ...form, role: e.target.value, expires_days: "" })}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
               >
                 {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
+              {form.role === "bot" && (
+                <input
+                  placeholder="Expires in days (blank = never)"
+                  type="number"
+                  min="1"
+                  value={form.expires_days}
+                  onChange={(e) => setForm({ ...form, expires_days: e.target.value })}
+                  className="col-span-2 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500"
+                />
+              )}
             </div>
             <div className="flex gap-2">
               <button
@@ -168,13 +211,14 @@ export default function UsersPage() {
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Created</th>
+                <th className="px-4 py-3 font-medium">API Key</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-600 text-xs">No users found.</td>
+                  <td colSpan={7} className="px-4 py-6 text-center text-gray-600 text-xs">No users found.</td>
                 </tr>
               )}
               {users.map((u) => (
@@ -200,6 +244,16 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500 font-mono whitespace-nowrap">
                     {new Date(u.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.role === "bot" && (
+                      <button
+                        onClick={() => regenerateKey(u.id)}
+                        className="text-xs text-yellow-600 hover:text-yellow-400 transition-colors"
+                      >
+                        New Key
+                      </button>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button

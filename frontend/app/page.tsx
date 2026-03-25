@@ -7,7 +7,8 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 
 type TableArtifact = { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string };
 type ChartArtifact = { artifact_type: "chart"; chart_type: "bar" | "line" | "pie"; title: string; x_key?: string; series?: { key: string; label: string }[]; data: Record<string, unknown>[] };
-type Artifact = TableArtifact | ChartArtifact;
+type ImageArtifact = { artifact_type: "image"; content: string; columns?: string[]; rows?: unknown[][]; title?: string };
+type Artifact = TableArtifact | ChartArtifact | ImageArtifact;
 type Message = { role: "user" | "assistant"; content: string; steps?: string[]; artifacts?: Artifact[] };
 type Tab = { id: string; label: string; messages: Message[] };
 type LogEntry = { content: string; timestamp: string };
@@ -130,11 +131,12 @@ export default function Page() {
     return { "Authorization": `Bearer ${token}` };
   }
 
-  async function downloadExport(type: "csv" | "pdf", artifact: TableArtifact) {
+  async function downloadExport(type: "csv" | "pdf" | "xlsx", artifact: { columns?: string[]; rows?: unknown[][]; title?: string }) {
+    const body = { format: type, columns: artifact.columns, rows: artifact.rows, title: artifact.title ?? "" };
     const res = await fetch(`${BACKEND}/api/agent/export/${type}/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
-      body: JSON.stringify({ columns: artifact.columns, rows: artifact.rows, title: artifact.title ?? "" }),
+      body: JSON.stringify(body),
     });
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -279,6 +281,9 @@ export default function Page() {
           setLogs((prev) => [...prev, { content: event.content, timestamp: new Date().toLocaleTimeString() }]);
         } else if (event.type === "artifact") {
           localArtifacts = [...localArtifacts, event as Artifact];
+        } else if (event.type === "image") {
+          const lastTable = [...localArtifacts].reverse().find(a => a.artifact_type === "table") as TableArtifact | undefined;
+          localArtifacts = [...localArtifacts, { artifact_type: "image", content: event.content, columns: lastTable?.columns, rows: lastTable?.rows, title: lastTable?.title } as ImageArtifact];
         } else if (event.type === "confirmation") {
           setPendingActions((prev) => [
             ...prev,
@@ -470,7 +475,21 @@ export default function Page() {
                       <ChartWidget artifact={artifact} />
                     </div>
                   )}
-                  {artifact.artifact_type === "table" && (
+                  {artifact.artifact_type === "image" && (
+                    <>
+                      {artifact.columns && (
+                        <div className="flex justify-end gap-3 px-3 py-1.5 border-b border-gray-700">
+                          <button onClick={() => downloadExport("csv", artifact)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download CSV</button>
+                          <button onClick={() => downloadExport("xlsx", artifact)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download XLSX</button>
+                          <button onClick={() => downloadExport("pdf", artifact)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download PDF</button>
+                        </div>
+                      )}
+                      <div className="p-3">
+                        <img src={`data:image/png;base64,${artifact.content}`} alt="table" className="max-w-full rounded" />
+                      </div>
+                    </>
+                  )}
+                  {/* artifact.artifact_type === "table" && (
                     <>
                     <div className="flex justify-end gap-3 px-3 py-1.5 border-b border-gray-700">
                       <button onClick={() => downloadExport("csv", artifact)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download CSV</button>
@@ -499,7 +518,7 @@ export default function Page() {
                     </table>
                     </div>
                     </>
-                  )}
+                  ) */}
                 </div>
               ))}
             </div>
