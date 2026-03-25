@@ -56,12 +56,19 @@ def parse_agent_response(raw: str, agent_name: str, task: str, q, fallback: str,
         if records and isinstance(records, list) and len(records) > 0:
             columns = list(records[0].keys())
             rows = [list(r.values()) for r in records]
-            title = parsed.get("summary", "")[:60]
+            title = parsed.get("title", parsed.get("summary", "export"))[:60]
             artifact = {"artifact_type": "table", "columns": columns, "rows": rows, "title": title}
             collected.append(artifact)
             logger.info(f"[{agent_name}] emitting table artifact: {len(rows)} rows, queue={'found' if q else 'NOT FOUND'}")
             if q:
                 q.put_nowait({"type": "artifact", **artifact})
+                try:
+                    import base64
+                    from agent.utils.table_image import render_table_image
+                    img = render_table_image(columns, rows)
+                    q.put_nowait({"type": "image", "content": base64.b64encode(img).decode()})
+                except Exception as e:
+                    logger.warning(f"[{agent_name}] table image render failed: {e}")
         else:
             logger.info(f"[{agent_name}] no records in response, summary only")
 

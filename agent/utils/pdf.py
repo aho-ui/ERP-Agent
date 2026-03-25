@@ -1,45 +1,58 @@
 import io
+import os
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+
+_BASE = os.path.dirname(__file__)
+pdfmetrics.registerFont(TTFont("IBMPlexSans", os.path.join(_BASE, "fonts", "IBMPlexSans-Regular.ttf")))
+pdfmetrics.registerFont(TTFont("IBMPlexMono-Bold", os.path.join(_BASE, "fonts", "IBMPlexMono-Bold.ttf")))
+
+_BG = "#0d0d0d"
+_HEADER_BG = "#0a0a0a"
+_ROW_EVEN = "#1a1a1a"
+_ROW_ODD = "#0d0d0d"
+_TEXT = "#f5f4f0"
+_GRID = "#2c2c2c"
 
 
 def generate_pdf_bytes(columns: list, rows: list, title: str = "") -> bytes:
     buf = io.BytesIO()
     page = landscape(A4) if len(columns) > 6 else A4
+
     doc = SimpleDocTemplate(buf, pagesize=page, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
 
-    styles = getSampleStyleSheet()
-    elements = []
-
-    if title:
-        elements.append(Paragraph(title, styles["Title"]))
-
-    table_data = [columns] + [[("" if c is None else str(c)) for c in row] for row in rows]
+    table_data = [[c.upper() for c in columns]] + [[("" if c is None else str(c)) for c in row] for row in rows]
 
     col_count = len(columns)
-    available = (page[0] - 72)
+    available = page[0] - 72
     col_width = available / col_count
 
     t = Table(table_data, colWidths=[col_width] * col_count, repeatRows=1)
     t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e3a5f")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(_HEADER_BG)),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(_TEXT)),
+        ("FONTNAME", (0, 0), (-1, 0), "IBMPlexMono-Bold"),
+        ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor(_TEXT)),
+        ("FONTNAME", (0, 1), (-1, -1), "IBMPlexSans"),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fa")]),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor(_ROW_EVEN), colors.HexColor(_ROW_ODD)]),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor(_GRID)),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
     ]))
-    elements.append(t)
 
-    doc.build(elements)
+    def _bg(canvas, doc):
+        canvas.setFillColor(colors.HexColor(_BG))
+        canvas.rect(0, 0, page[0], page[1], fill=1, stroke=0)
+
+    doc.build([t], onFirstPage=_bg, onLaterPages=_bg)
     buf.seek(0)
     return buf.read()
 
