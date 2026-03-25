@@ -9,3 +9,6 @@ botbuilder-core
 botbuilder-integration-aiohttp
 python-telegram-bot
 discord.py
+openpyxl
+matplotlib
+pillow

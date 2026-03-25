@@ -1,6 +1,9 @@
 import json
+import uuid
+from datetime import timedelta
 from django.contrib.auth import authenticate, get_user_model
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from rest_framework_simplejwt.tokens import AccessToken
@@ -68,14 +71,23 @@ def users_list(request):
         body = json.loads(request.body)
         if User.objects.filter(username=body["username"]).exists():
             return JsonResponse({"error": "Username already exists"}, status=400)
+        role = body.get("role", User.Role.VIEWER)
         user = User.objects.create_user(
             username=body["username"],
             email=body.get("email", ""),
-            password=body["password"],
+            password=body.get("password", uuid.uuid4().hex),
         )
-        user.role = body.get("role", User.Role.VIEWER)
+        user.role = role
+        resp = {"id": str(user.id), "username": user.username}
+        if role == User.Role.BOT:
+            user.api_key = uuid.uuid4()
+            expires_days = body.get("expires_days")
+            if expires_days is not None:
+                user.api_key_expires_at = timezone.now() + timedelta(days=int(expires_days))
+            resp["api_key"] = str(user.api_key)
+            resp["api_key_expires_at"] = user.api_key_expires_at.isoformat() if user.api_key_expires_at else None
         user.save()
-        return JsonResponse({"id": str(user.id), "username": user.username}, status=201)
+        return JsonResponse(resp, status=201)
 
     return JsonResponse({"error": "Method not allowed"}, status=405)
 
@@ -97,8 +109,15 @@ def user_detail(request, user_id):
             user.role = body["role"]
         if "is_active" in body:
             user.is_active = body["is_active"]
+        resp = {"id": str(user.id), "role": user.role, "is_active": user.is_active}
+        if body.get("regenerate_key") and user.role == User.Role.BOT:
+            user.api_key = uuid.uuid4()
+            expires_days = body.get("expires_days")
+            if expires_days is not None:
+                user.api_key_expires_at = timezone.now() + timedelta(days=int(expires_days))
+            resp["api_key"] = str(user.api_key)
         user.save()
-        return JsonResponse({"id": str(user.id), "role": user.role, "is_active": user.is_active})
+        return JsonResponse(resp)
 
     if request.method == "DELETE":
         user.delete()
