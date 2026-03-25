@@ -20,6 +20,14 @@ def connect():
     return uid, models
 
 
+def health() -> bool:
+    try:
+        connect()
+        return True
+    except Exception:
+        return False
+
+
 def execute(uid, models, model, method, args, kwargs=None):
     return models.execute_kw(DB, uid, PASSWORD, model, method, args, kwargs or {})
 

@@ -1,5 +1,9 @@
 import argparse
+import sys
 import xmlrpc.client
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from utils.sales import generate_sales
 from utils.vendors import generate_vendors
@@ -63,6 +67,32 @@ def main():
 
     if args.hr or run_all:
         generate_hr(uid, models, cfg)
+
+
+def check() -> bool:
+    try:
+        uid, _ = connect()
+        return bool(uid)
+    except Exception:
+        return False
+
+
+def run():
+    cfg = {"url": URL, "db": DB, "password": PASSWORD}
+    uid, models = connect()
+    print(f"Connected as uid={uid}")
+
+    def search_ids(model, domain=None):
+        return models.execute_kw(DB, uid, PASSWORD, model, "search", [domain or []])
+
+    generate_sales(uid, models, cfg)
+    product_ids = search_ids("product.product", [["sale_ok", "=", True]])
+    generate_vendors(uid, models, cfg, product_ids)
+    vendor_ids = search_ids("res.partner", [["supplier_rank", ">", 0]])
+    generate_purchase(uid, models, cfg, vendor_ids, product_ids)
+    generate_invoices(uid, models, cfg)
+    generate_inventory(uid, models, cfg, product_ids)
+    generate_hr(uid, models, cfg)
 
 
 if __name__ == "__main__":
