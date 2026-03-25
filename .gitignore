@@ -1,9 +1,11 @@
 # Credentials
 .credentials
 .env
+**/nanobot.config
 
-# Memory
+# Memory & Sessions
 memory/
+sessions/
 
 # Python
 .venv/
@@ -13,6 +15,13 @@ __pycache__/
 dist/
 build/
 .eggs/
+
+# Claude
+.claude/
+
+# Databases
+*.sqlite3
+*.db
 
 # VSCode
 .vscode/
