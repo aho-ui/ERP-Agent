@@ -1,36 +1,18 @@
 import asyncio
 import json
-from contextvars import ContextVar
 from typing import Any
 import litellm
 
+_TOOL_TIMEOUT = 60
+
+
+def _unavailable() -> str:
+    return "Tool is unavailable, please apologize to the user and ask them to try again later."
+
 from loguru import logger
-from nanobot.agent.loop import AgentLoop
 from nanobot.agent.tools.base import Tool
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.litellm_provider import LiteLLMProvider
-from nanobot.config.loader import load_config
-from nanobot.config.schema import MCPServerConfig
-from MCP.config import SERVERS
 from agent.utils.parsing import parse_agent_response
-
-_agent_loop: AgentLoop | None = None
-_task_queues: dict[int, asyncio.Queue] = {}
-
-_user_role: ContextVar[str] = ContextVar("user_role", default="viewer")
-_user_id: ContextVar[str | None] = ContextVar("user_id", default=None)
-
-WRITE_TOOLS = {
-    "mcp_odoo_create_sales_order",
-    "mcp_odoo_create_purchase_order",
-    "mcp_odoo_create_customer_invoice",
-}
-
-TOOL_GUARDRAILS: dict[str, dict] = {
-    "mcp_odoo_create_sales_order":      {"max_quantity": 1000},
-    "mcp_odoo_create_purchase_order":   {"max_quantity": 1000},
-    "mcp_odoo_create_customer_invoice": {"max_quantity": 1000, "max_unit_price": 100_000},
-}
+from agent.framework.nanobot.utils.guardrails import WRITE_TOOLS, TOOL_GUARDRAILS
 
 
 class DispatchTool(Tool):
@@ -47,10 +29,22 @@ class DispatchTool(Tool):
 
     @property
     def description(self) -> str:
+        from agent.framework.nanobot.agents.sub_agents_odoo import AGENTS as _ODOO_AGENTS
+        from agent.framework.nanobot.agents.sub_agents_demo import AGENTS as _DEMO_AGENTS
+        from agent.framework.nanobot.main import _healthy_servers
+        all_agents = [
+            a for a in (_ODOO_AGENTS + _DEMO_AGENTS)
+            if all(
+                t.split("_")[1] in _healthy_servers
+                for t in a["allowed_tools"]
+                if t.startswith("mcp_")
+            )
+        ]
+        names = ", ".join(a["name"] for a in all_agents) or "none"
         return (
             "Route a task to a specialized domain agent. "
             "Use this for all ERP operations instead of calling MCP tools directly. "
-            "Available agents: purchase_agent, sales_agent, invoice_agent, inventory_agent, analytics_agent."
+            f"Available agents: {names}."
         )
 
     @property
@@ -71,8 +65,19 @@ class DispatchTool(Tool):
         }
 
     async def execute(self, agent_name: str, task: str) -> str:
-        from agent.framework.agents import AGENTS
+        from agent.framework.nanobot.agents.sub_agents_odoo import AGENTS as _ODOO_AGENTS
+        from agent.framework.nanobot.agents.sub_agents_demo import AGENTS as _DEMO_AGENTS
+        from agent.framework.nanobot.main import _healthy_servers
+        AGENTS = [
+            a for a in (_ODOO_AGENTS + _DEMO_AGENTS)
+            if all(
+                t.split("_")[1] in _healthy_servers
+                for t in a["allowed_tools"]
+                if t.startswith("mcp_")
+            )
+        ]
         from agent.models import AgentAction, AgentTemplate
+        from agent.framework.nanobot.main import _user_role, _user_id, _task_queues
 
         db_template = await AgentTemplate.objects.filter(name=agent_name, is_active=True).afirst()
         if db_template:
@@ -113,12 +118,20 @@ class DispatchTool(Tool):
             {"role": "user", "content": task},
         ]
 
+        current_task = asyncio.current_task()
+        q = _task_queues.get(id(current_task)) if current_task else None
+
+        if q:
+            q.put_nowait({"type": "progress", "content": f"dispatch({agent_name!r})"})
+
         final_text = "Task completed with no output."
         total_prompt = 0
         total_completion = 0
 
         try:
             for _ in range(10):
+                if _ == 0:
+                    logger.info(f"[sub-agent:{agent_name}] start")
                 response = await litellm.acompletion(
                     model=self._model,
                     messages=messages,
@@ -147,6 +160,7 @@ class DispatchTool(Tool):
                         tool = filtered.get(tc.function.name)
                         if tool:
                             kwargs = json.loads(tc.function.arguments)
+                            logger.info(f"[sub-agent:{agent_name}] → {tc.function.name}({tc.function.arguments})")
                             guardrail = TOOL_GUARDRAILS.get(tc.function.name, {})
                             violation = None
                             if "max_quantity" in guardrail and kwargs.get("quantity", 0) > guardrail["max_quantity"]:
@@ -159,7 +173,16 @@ class DispatchTool(Tool):
                                     output={"error": violation},
                                 )
                                 return violation
-                            result = await tool.execute(**kwargs)
+                            if q:
+                                q.put_nowait({"type": "progress", "content": f"[{agent_name}] → {tc.function.name}({json.dumps(kwargs)})"})
+                            try:
+                                result = await asyncio.wait_for(tool.execute(**kwargs), timeout=_TOOL_TIMEOUT)
+                            except asyncio.TimeoutError:
+                                result = _unavailable()
+                            preview = result[:120] if isinstance(result, str) else str(result)[:120]
+                            logger.info(f"[sub-agent:{agent_name}] ← {tc.function.name}: {preview}")
+                            if q:
+                                q.put_nowait({"type": "progress", "content": f"[{agent_name}] ← {tc.function.name}: {preview}"})
                             if tc.function.name in WRITE_TOOLS:
                                 try:
                                     ref_data = json.loads(result)
@@ -178,13 +201,13 @@ class DispatchTool(Tool):
                         })
                 else:
                     final_text = msg.content or final_text
+                    preview = final_text[:200] if isinstance(final_text, str) else str(final_text)[:200]
+                    logger.info(f"[sub-agent:{agent_name}] ← {preview}")
                     break
 
-            logger.info(f"[{agent_name}] raw response: {final_text[:500]}")
+            # logger.info(f"[{agent_name}] raw response: {final_text[:500]}")
 
             tools_used = ", ".join(dict.fromkeys(m["name"] for m in messages if m.get("role") == "tool"))[:255]
-            current_task = asyncio.current_task()
-            q = _task_queues.get(id(current_task)) if current_task else None
             result = parse_agent_response(final_text, agent_name, task, q, fallback=final_text, action_id=action.id)
 
             tokens = {"prompt": total_prompt, "completion": total_completion, "total": total_prompt + total_completion}
@@ -212,64 +235,3 @@ class DispatchTool(Tool):
                 output={"error": str(e)},
             )
             raise
-
-
-def _tool_call_sink(message):
-    text = message.record["message"]
-    if not text.startswith("Tool call: "):
-        return
-    task = asyncio.current_task()
-    if task:
-        q = _task_queues.get(id(task))
-        if q:
-            q.put_nowait({"type": "progress", "content": text})
-
-
-logger.add(_tool_call_sink, level="INFO", format="{message}")
-
-
-def get_agent_loop() -> AgentLoop:
-    global _agent_loop
-    if _agent_loop is None:
-        config = load_config()
-        provider_cfg = config.get_provider()
-        provider = LiteLLMProvider(
-            api_key=provider_cfg.api_key if provider_cfg else None,
-            api_base=provider_cfg.api_base if provider_cfg else None,
-            default_model=config.agents.defaults.model,
-        )
-        bus = MessageBus()
-        workspace = config.workspace_path
-        workspace.mkdir(parents=True, exist_ok=True)
-
-        mcp_servers = {
-            name: MCPServerConfig(**cfg)
-            for name, cfg in SERVERS.items()
-        }
-
-        _agent_loop = AgentLoop(
-            bus=bus,
-            provider=provider,
-            workspace=workspace,
-            mcp_servers=mcp_servers,
-        )
-
-        dispatch_tool = DispatchTool(
-            provider=provider,
-            registry=_agent_loop.tools,
-            model=config.agents.defaults.model,
-            temperature=config.agents.defaults.temperature,
-            max_tokens=config.agents.defaults.max_tokens,
-        )
-        _agent_loop.tools.register(dispatch_tool)
-
-        # Supervisor must never call MCP tools directly — dispatch only.
-        # Patch get_definitions to hide mcp_* tools from the supervisor's LLM call.
-        # The tools remain registered so DispatchTool can still access them.
-        _orig_defs = _agent_loop.tools.get_definitions
-        _agent_loop.tools.get_definitions = lambda: [
-            d for d in _orig_defs()
-            if not d["function"]["name"].startswith("mcp_")
-        ]
-
-    return _agent_loop

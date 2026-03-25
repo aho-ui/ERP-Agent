@@ -1,8 +1,6 @@
 def get_agent(name: str):
-    if name == "groq":
-        from agent.framework import groq
-        return groq
-    elif name == "openai":
-        from agent.framework import nanobot
-        return nanobot
-    raise ValueError(f"Unknown provider: {name}")
+    import importlib
+    try:
+        return importlib.import_module(f"agent.framework.{name}.main")
+    except ModuleNotFoundError:
+        raise ValueError(f"Unknown provider: {name}")

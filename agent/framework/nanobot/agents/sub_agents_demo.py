@@ -10,10 +10,11 @@ _CHART_FORMAT = (
 
 _RESPONSE_FORMAT = (
     "\n\nCRITICAL: Your final response MUST be a single valid JSON object. No markdown, no prose, no code fences.\n"
-    "For list results: {\"summary\": \"<one sentence>\", \"records\": [<flat dicts>]}\n"
+    "For list results: {\"title\": \"<3-5 word title>\", \"summary\": \"<one sentence>\", \"records\": [<flat dicts>]}\n"
     "For single operations (create/confirm): {\"summary\": \"<one sentence>\"}\n"
     "Field names must match exactly what the tool returned (e.g. name, partner_id, amount_total).\n"
-    "Example: {\"summary\": \"Found 3 purchase orders.\", \"records\": [{\"name\": \"P00001\", \"amount_total\": 500.0}]}"
+    "Include ALL fields returned by the tool in each record. Do not omit or summarize fields.\n"
+    "Example: {\"title\": \"Top Sales Orders\", \"summary\": \"Found 3 purchase orders.\", \"records\": [{\"name\": \"P00001\", \"amount_total\": 500.0}]}"
 )
 
 _WRITE_FORMAT = (
@@ -24,8 +25,8 @@ _WRITE_FORMAT = (
 
 AGENTS = [
     {
-        "name": "purchase_agent",
-        "description": "Handles purchase orders and vendor operations",
+        "name": "demo_purchase_agent",
+        "description": "Handles purchase orders and vendor operations (demo/SQLite)",
         "system_prompt": (
             "You are a Purchase Agent specializing in procurement operations.\n"
             "Your job is to fulfill the assigned task using the available tools.\n"
@@ -34,15 +35,15 @@ AGENTS = [
             + _WRITE_FORMAT
         ),
         "allowed_tools": [
-            "mcp_odoo_get_purchase_orders",
-            "mcp_odoo_create_purchase_order",
-            "mcp_odoo_get_vendors",
-            "mcp_odoo_get_products",
+            "mcp_sqlite_get_purchase_orders",
+            "mcp_sqlite_create_purchase_order",
+            "mcp_sqlite_get_vendors",
+            "mcp_sqlite_get_products",
         ],
     },
     {
-        "name": "sales_agent",
-        "description": "Handles sales orders and customer operations",
+        "name": "demo_sales_agent",
+        "description": "Handles sales orders and customer operations (demo/SQLite)",
         "system_prompt": (
             "You are a Sales Agent specializing in sales order management.\n"
             "Your job is to fulfill the assigned task using the available tools.\n"
@@ -51,15 +52,15 @@ AGENTS = [
             + _WRITE_FORMAT
         ),
         "allowed_tools": [
-            "mcp_odoo_get_sales_orders",
-            "mcp_odoo_create_sales_order",
-            "mcp_odoo_get_customers",
-            "mcp_odoo_get_products",
+            "mcp_sqlite_get_sales_orders",
+            "mcp_sqlite_create_sales_order",
+            "mcp_sqlite_get_customers",
+            "mcp_sqlite_get_products",
         ],
     },
     {
-        "name": "invoice_agent",
-        "description": "Handles customer invoices and vendor bills",
+        "name": "demo_invoice_agent",
+        "description": "Handles customer invoices and vendor bills (demo/SQLite)",
         "system_prompt": (
             "You are an Invoice Agent specializing in accounts receivable and payable.\n"
             "Your job is to fulfill the assigned task using the available tools.\n"
@@ -68,15 +69,15 @@ AGENTS = [
             + _WRITE_FORMAT
         ),
         "allowed_tools": [
-            "mcp_odoo_get_invoices",
-            "mcp_odoo_get_vendor_bills",
-            "mcp_odoo_create_customer_invoice",
-            "mcp_odoo_get_customers",
+            "mcp_sqlite_get_invoices",
+            "mcp_sqlite_get_vendor_bills",
+            "mcp_sqlite_create_customer_invoice",
+            "mcp_sqlite_get_customers",
         ],
     },
     {
-        "name": "inventory_agent",
-        "description": "Handles product catalog and inventory queries",
+        "name": "demo_inventory_agent",
+        "description": "Handles product catalog and inventory queries (demo/SQLite)",
         "system_prompt": (
             "You are an Inventory Agent specializing in stock and product management.\n"
             "Your job is to fulfill the assigned task using the available tools.\n"
@@ -84,12 +85,12 @@ AGENTS = [
             + _RESPONSE_FORMAT
         ),
         "allowed_tools": [
-            "mcp_odoo_get_products",
+            "mcp_sqlite_get_products",
         ],
     },
     {
-        "name": "analytics_agent",
-        "description": "Handles cross-functional reporting and data analysis",
+        "name": "demo_analytics_agent",
+        "description": "Handles cross-functional reporting and data analysis (demo/SQLite)",
         "system_prompt": (
             "You are an Analytics Agent specializing in ERP data analysis and reporting.\n"
             "Your job is to fulfill the assigned task using the available tools.\n"
@@ -98,13 +99,13 @@ AGENTS = [
             + _CHART_FORMAT
         ),
         "allowed_tools": [
-            "mcp_odoo_get_sales_orders",
-            "mcp_odoo_get_purchase_orders",
-            "mcp_odoo_get_invoices",
-            "mcp_odoo_get_vendor_bills",
-            "mcp_odoo_get_customers",
-            "mcp_odoo_get_vendors",
-            "mcp_odoo_get_products",
+            "mcp_sqlite_get_sales_orders",
+            "mcp_sqlite_get_purchase_orders",
+            "mcp_sqlite_get_invoices",
+            "mcp_sqlite_get_vendor_bills",
+            "mcp_sqlite_get_customers",
+            "mcp_sqlite_get_vendors",
+            "mcp_sqlite_get_products",
         ],
     },
 ]

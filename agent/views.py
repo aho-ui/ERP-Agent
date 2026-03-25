@@ -1,23 +1,24 @@
 import asyncio
 import json
 import os
-import urllib.request
-from django.http import StreamingHttpResponse, JsonResponse
+from loguru import logger
+from django.http import StreamingHttpResponse, JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from rest_framework_simplejwt.tokens import AccessToken as JWTToken
 from rest_framework_simplejwt.exceptions import TokenError
 
 from agent.framework.agent import get_agent
-from agent.framework.nanobot import _user_role, _user_id
 
-PROVIDER = "openai"  # groq || openai
+# PROVIDER = os.environ.get("AGENT_PROVIDER", "openai")
+PROVIDER = os.environ.get("AGENT_PROVIDER", "nanobot")
 _agent = get_agent(PROVIDER)
 get_agent_loop = _agent.get_agent_loop
 _task_queues = _agent._task_queues
+_user_role = _agent._user_role
+_user_id = _agent._user_id
 from agent.models import AgentAction, AgentTemplate
 from agent.utils.streaming import stream_queue
-from MCP.config import SERVERS
 
 
 def _parse_token(request):
@@ -31,8 +32,26 @@ def _parse_token(request):
         return None, "viewer"
 
 
-def _require_auth(request, admin_only=False):
+async def _parse_api_key(request):
+    api_key = request.headers.get("X-API-Key", "")
+    if not api_key:
+        return None, None
+    from asgiref.sync import sync_to_async
+    from django.utils import timezone
+    from users.models import User
+    try:
+        user = await sync_to_async(User.objects.get)(api_key=api_key, is_active=True)
+        if user.api_key_expires_at and user.api_key_expires_at < timezone.now():
+            return None, None
+        return str(user.id), user.role
+    except Exception:
+        return None, None
+
+
+async def _require_auth(request, admin_only=False):
     user_id, role = _parse_token(request)
+    if not user_id:
+        user_id, role = await _parse_api_key(request)
     if not user_id:
         return None, None, JsonResponse({"error": "Unauthorized"}, status=401)
     if admin_only and role != "admin":
@@ -40,15 +59,13 @@ def _require_auth(request, admin_only=False):
     return user_id, role, None
 
 
-async def _on_confirmation(event):
-    if event.get("type") != "confirmation":
-        return None
-    return f"data: {json.dumps({'type': 'confirmation', 'action_id': event['action_id'], 'summary': event['summary']})}\n\n"
-
-
 @csrf_exempt
 @require_POST
 async def chat(request):
+    user_id, role, err = await _require_auth(request)
+    if err:
+        return err
+
     try:
         body = json.loads(request.body)
     except json.JSONDecodeError:
@@ -59,23 +76,32 @@ async def chat(request):
         return JsonResponse({"error": "message is required"}, status=400)
 
     session_key = body.get("session_key", "api:default")
-    user_id, role = _parse_token(request)
     _user_role.set(role)
     _user_id.set(user_id)
     queue = asyncio.Queue()
 
-    async def on_progress(content):
+    async def on_progress(content, **_):
         await queue.put({"type": "progress", "content": content})
 
     async def run_agent():
         agent_loop = get_agent_loop()
-        response = await agent_loop.process_direct(
-            content=message,
-            session_key=session_key,
-            on_progress=on_progress,
-        )
-        await queue.put({"type": "response", "content": response})
-        await queue.put(None)
+        try:
+            response = await agent_loop.process_direct(
+                content=message,
+                session_key=session_key,
+                on_progress=on_progress,
+            )
+            await queue.put({"type": "response", "content": response})
+        except Exception as e:
+            logger.error(f"[agent] error: {e}")
+            await queue.put({"type": "response", "content": f"Error: {e}"})
+        finally:
+            await queue.put(None)
+
+    async def _on_confirmation(event):
+        if event.get("type") != "confirmation":
+            return None
+        return f"data: {json.dumps({'type': 'confirmation', 'action_id': event['action_id'], 'summary': event['summary']})}\n\n"
 
     task = asyncio.create_task(run_agent())
     _task_queues[id(task)] = queue
@@ -85,13 +111,16 @@ async def chat(request):
 
 @csrf_exempt
 @require_POST
-async def confirm_action(_request, action_id):
+async def confirm_action(request, action_id):
+    user_id, role, err = await _require_auth(request)
+    if err:
+        return err
+
     try:
         action = await AgentAction.objects.aget(id=action_id, status=AgentAction.Status.PENDING)
     except AgentAction.DoesNotExist:
         return JsonResponse({"error": "Action not found or already resolved"}, status=404)
 
-    user_id, role = _parse_token(_request)
     _user_role.set(role)
     _user_id.set(user_id)
     queue = asyncio.Queue()
@@ -137,7 +166,7 @@ async def cancel_action(request, action_id):
 
 
 async def pending_actions(_request):
-    _, _, err = _require_auth(_request)
+    _, _, err = await _require_auth(_request)
     if err:
         return err
     rows = AgentAction.objects.filter(status=AgentAction.Status.PENDING).order_by("timestamp").values(
@@ -156,12 +185,10 @@ async def pending_actions(_request):
 
 
 async def agent_logs(request):
-    _, _, err = _require_auth(request, admin_only=True)
+    _, _, err = await _require_auth(request, admin_only=True)
     if err:
         return err
-    qs = AgentAction.objects.order_by("-timestamp")
-
-    rows = qs.values(
+    rows = AgentAction.objects.order_by("-timestamp").values(
         "id", "intent", "agent_name", "tool_called", "status", "timestamp", "output", "artifacts"
     )
     results = [
@@ -182,10 +209,12 @@ async def agent_logs(request):
 
 @csrf_exempt
 async def agent_templates(request):
-    from agent.framework.agents import AGENTS
+    from agent.framework.nanobot.agents.sub_agents_odoo import AGENTS as _ODOO_AGENTS
+    from agent.framework.nanobot.agents.sub_agents_demo import AGENTS as _DEMO_AGENTS
+    AGENTS = _ODOO_AGENTS + _DEMO_AGENTS
 
     if request.method == "GET":
-        _, _, err = _require_auth(request)
+        _, _, err = await _require_auth(request)
         if err:
             return err
         db_names = set()
@@ -199,7 +228,7 @@ async def agent_templates(request):
         return JsonResponse(results, safe=False)
 
     if request.method == "POST":
-        user_id, _, err = _require_auth(request, admin_only=True)
+        user_id, _, err = await _require_auth(request, admin_only=True)
         if err:
             return err
         body = json.loads(request.body)
@@ -217,15 +246,16 @@ async def agent_templates(request):
 
 @csrf_exempt
 async def agent_template_detail(request, template_id):
+    _, _, err = await _require_auth(request, admin_only=True)
+    if err:
+        return err
+
     try:
         template = await AgentTemplate.objects.aget(id=template_id)
     except AgentTemplate.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
 
     if request.method == "PUT":
-        _, _, err = _require_auth(request, admin_only=True)
-        if err:
-            return err
         body = json.loads(request.body)
         template.name = body.get("name", template.name)
         template.type = body.get("type", template.type)
@@ -235,9 +265,6 @@ async def agent_template_detail(request, template_id):
         return JsonResponse({"id": str(template.id), "name": template.name})
 
     if request.method == "DELETE":
-        _, _, err = _require_auth(request, admin_only=True)
-        if err:
-            return err
         await template.adelete()
         return JsonResponse({"status": "deleted"})
 
@@ -245,10 +272,12 @@ async def agent_template_detail(request, template_id):
 
 
 async def available_tools(_request):
-    _, _, err = _require_auth(_request)
+    _, _, err = await _require_auth(_request)
     if err:
         return err
-    from agent.framework.agents import AGENTS
+    from agent.framework.nanobot.agents.sub_agents_odoo import AGENTS as _ODOO_AGENTS
+    from agent.framework.nanobot.agents.sub_agents_demo import AGENTS as _DEMO_AGENTS
+    AGENTS = _ODOO_AGENTS + _DEMO_AGENTS
     tools: set[str] = set()
     for a in AGENTS:
         tools.update(a["allowed_tools"])
@@ -257,49 +286,37 @@ async def available_tools(_request):
 
 @csrf_exempt
 @require_POST
-async def export_csv(request):
-    _, _, err = _require_auth(request)
+async def export(request):
+    _, _, err = await _require_auth(request)
     if err:
         return err
-    from agent.utils.csv_export import generate_csv_bytes
     body = json.loads(request.body)
-    data = generate_csv_bytes(body["columns"], body["rows"])
-    from django.http import HttpResponse
-    response = HttpResponse(data, content_type="text/csv")
-    response["Content-Disposition"] = f'attachment; filename="{body.get("title", "export")}.csv"'
-    return response
+    fmt = body.get("format", "csv")
+    title = body.get("title", "export")
 
+    if fmt == "pdf":
+        from agent.utils.pdf import generate_pdf_bytes
+        data = generate_pdf_bytes(body["columns"], body["rows"], title=title)
+        content_type = "application/pdf"
+    elif fmt == "xlsx":
+        from agent.utils.xlsx_export import generate_xlsx_bytes
+        data = generate_xlsx_bytes(body["columns"], body["rows"])
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        from agent.utils.csv_export import generate_csv_bytes
+        data = generate_csv_bytes(body["columns"], body["rows"])
+        content_type = "text/csv"
 
-@csrf_exempt
-@require_POST
-async def export_pdf(request):
-    _, _, err = _require_auth(request)
-    if err:
-        return err
-    from agent.utils.pdf import generate_pdf_bytes
-    body = json.loads(request.body)
-    data = generate_pdf_bytes(body["columns"], body["rows"], title=body.get("title", ""))
-    from django.http import HttpResponse
-    response = HttpResponse(data, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{body.get("title", "export")}.pdf"'
+    response = HttpResponse(data, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{title}.{fmt}"'
     return response
 
 
 async def mcp_health(_request):
-    results = []
+    from MCP.utils.health import check_all
     loop = asyncio.get_event_loop()
-    for name, cfg in SERVERS.items():
-        if cfg.get("url"):
-            transport = "http"
-            try:
-                await loop.run_in_executor(None, lambda: urllib.request.urlopen(cfg["url"], timeout=3))
-                status = "ok"
-            except Exception:
-                status = "error"
-        else:
-            transport = "stdio"
-            args = cfg.get("args", [])
-            path = args[0] if args else ""
-            status = "ok" if os.path.exists(path) else "error"
-        results.append({"name": name, "transport": transport, "status": status})
-    return JsonResponse(results, safe=False)
+    results = await loop.run_in_executor(None, check_all)
+    return JsonResponse(
+        [{"name": name, "status": "ok" if ok else "error"} for name, ok in results.items()],
+        safe=False,
+    )

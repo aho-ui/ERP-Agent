@@ -1,5 +1,5 @@
 from django.urls import path
-from agent.views import chat, mcp_health, confirm_action, cancel_action, pending_actions, agent_logs, agent_templates, agent_template_detail, available_tools, export_csv, export_pdf
+from agent.views import chat, mcp_health, confirm_action, cancel_action, pending_actions, agent_logs, agent_templates, agent_template_detail, available_tools, export
 
 urlpatterns = [
     path("chat/", chat, name="agent-chat"),
@@ -11,6 +11,8 @@ urlpatterns = [
     path("templates/", agent_templates, name="agent-templates"),
     path("templates/tools/", available_tools, name="agent-available-tools"),
     path("templates/<uuid:template_id>/", agent_template_detail, name="agent-template-detail"),
-    path("export/csv/", export_csv, name="agent-export-csv"),
-    path("export/pdf/", export_pdf, name="agent-export-pdf"),
+    path("export/", export, name="agent-export"),
+    path("export/csv/", export, name="agent-export-csv"),
+    path("export/pdf/", export, name="agent-export-pdf"),
+    path("export/xlsx/", export, name="agent-export-xlsx"),
 ]
