@@ -17,8 +17,6 @@ export default function BotDetailPage() {
   const [sessions, setSessions] = useState<BotSession[]>([]);
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -61,25 +59,6 @@ export default function BotDetailPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [activeSession, fetchMessages]);
 
-  async function sendMessage() {
-    if (!input.trim() || !activeSession || sending) return;
-    setSending(true);
-    const res = await fetch(`${BACKEND}/api/agent/bots/${botId}/sessions/${activeSession}/chat/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeader() },
-      body: JSON.stringify({ content: input.trim() }),
-    });
-    if (res.ok) {
-      setInput("");
-      fetchMessages(activeSession);
-      fetch(`${BACKEND}/api/agent/bots/${botId}/sessions/`, { headers: authHeader() })
-        .then(r => r.ok ? r.json() : [])
-        .then(setSessions)
-        .catch(() => {});
-    }
-    setSending(false);
-  }
-
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 text-xs">
@@ -93,7 +72,6 @@ export default function BotDetailPage() {
       </div>
 
       <div className="flex h-[calc(100vh-33px)]">
-        {/* sessions sidebar */}
         <div className="w-56 border-r border-gray-800 flex flex-col">
           <p className="text-[10px] text-gray-600 font-medium px-3 pt-3 pb-2 uppercase tracking-wider">Sessions</p>
           <div className="flex-1 overflow-y-auto">
@@ -115,49 +93,27 @@ export default function BotDetailPage() {
           </div>
         </div>
 
-        {/* message view */}
         <div className="flex-1 flex flex-col">
           {!activeSession ? (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-xs text-gray-700">Select a session to view messages.</p>
             </div>
           ) : (
-            <>
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-                {messages.map(m => (
-                  <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[70%] px-3 py-2 rounded-xl text-sm ${
-                      m.role === "user"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-800 text-gray-200"
-                    }`}>
-                      <p className="whitespace-pre-wrap">{m.content}</p>
-                      <p className="text-[10px] opacity-50 mt-1">{new Date(m.timestamp).toLocaleTimeString()}</p>
-                    </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+              {messages.map(m => (
+                <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[70%] px-3 py-2 rounded-xl text-sm ${
+                    m.role === "user"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-800 text-gray-200"
+                  }`}>
+                    <p className="whitespace-pre-wrap">{m.content}</p>
+                    <p className="text-[10px] opacity-50 mt-1">{new Date(m.timestamp).toLocaleTimeString()}</p>
                   </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* manual override input */}
-              <div className="border-t border-gray-800 px-4 py-3 flex gap-2">
-                <input
-                  className="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm outline-none placeholder-gray-600 focus:ring-1 focus:ring-blue-600"
-                  placeholder="Send override message..."
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                  disabled={sending}
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={sending || !input.trim()}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-medium disabled:opacity-40 transition-colors"
-                >
-                  {sending ? "..." : "Send"}
-                </button>
-              </div>
-            </>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
           )}
         </div>
       </div>

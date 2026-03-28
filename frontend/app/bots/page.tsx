@@ -28,6 +28,7 @@ export default function BotsPage() {
   const [token, setToken] = useState("");
   const [saving, setSaving] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [changingRole, setChangingRole] = useState<string | null>(null);
 
   function authHeader() {
     return { "Authorization": `Bearer ${localStorage.getItem("access_token") ?? ""}` };
@@ -73,6 +74,19 @@ export default function BotsPage() {
       setBots(prev => prev.map(b => b.id === bot.id ? { ...b, is_active: !bot.is_active, running: data.running } : b));
     }
     setToggling(null);
+  }
+
+  async function changeRole(bot: Bot, newRole: string) {
+    setChangingRole(bot.id);
+    const res = await fetch(`${BACKEND}/api/agent/bots/${bot.id}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ role: newRole }),
+    });
+    if (res.ok) {
+      setBots(prev => prev.map(b => b.id === bot.id ? { ...b, role: newRole } : b));
+    }
+    setChangingRole(null);
   }
 
   async function deleteBot(id: string) {
@@ -164,10 +178,25 @@ export default function BotsPage() {
             <div key={bot.id} className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
               <div className="flex-1 min-w-0">
                 <Link href={`/bots/${bot.id}`} className="text-sm text-gray-200 hover:text-white truncate block">{bot.name}</Link>
-                <p className="text-xs text-gray-500 capitalize mt-0.5">
-                  {bot.platform}
-                  <span className="ml-2 text-gray-600">{bot.role}</span>
-                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs text-gray-500 capitalize">{bot.platform}</span>
+                  <div className="flex gap-1">
+                    {ROLES.map(r => (
+                      <button
+                        key={r.value}
+                        disabled={changingRole === bot.id}
+                        onClick={() => bot.role !== r.value && changeRole(bot, r.value)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded transition-colors disabled:opacity-40 ${
+                          bot.role === r.value
+                            ? "bg-blue-900/50 text-blue-400"
+                            : "text-gray-600 hover:text-gray-400"
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {bot.is_active && (
