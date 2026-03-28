@@ -8,25 +8,20 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 type TableArtifact = { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string };
 type ChartArtifact = { artifact_type: "chart"; chart_type: "bar" | "line" | "pie"; title: string; x_key?: string; series?: { key: string; label: string }[]; data: Record<string, unknown>[] };
 type ImageArtifact = { artifact_type: "image"; content: string; columns?: string[]; rows?: unknown[][]; title?: string };
-type Artifact = TableArtifact | ChartArtifact | ImageArtifact;
+type PoLine = { product: string; qty: number; unit_price: number; total: number };
+type PoData = { po_number?: string; date?: string; vendor?: { name: string }; lines?: PoLine[]; subtotal?: number; tax?: number; total?: number };
+type PdfArtifact = { artifact_type: "pdf"; content: string; title?: string; data?: PoData };
+type Artifact = TableArtifact | ChartArtifact | ImageArtifact | PdfArtifact;
 type Message = { role: "user" | "assistant"; content: string; steps?: string[]; artifacts?: Artifact[] };
 type Tab = { id: string; label: string; messages: Message[] };
 type LogEntry = { content: string; timestamp: string };
 type McpServer = { name: string; transport: string; status: "ok" | "error" };
-type PendingAction = { action_id: string; summary: string; agent_name: string; timestamp: string };
+type PendingAction = { action_id: string; summary: string; details?: Record<string, unknown>; agent_name: string; timestamp: string };
 
 const BACKEND = "http://localhost:8000";
 
-function newTab(n: number): Tab {
-  return { id: crypto.randomUUID(), label: `Chat ${n}`, messages: [] };
-}
-
-function loadTabs(username: string): Tab[] {
-  try {
-    const saved = JSON.parse(localStorage.getItem(`chat_tabs_${username}`) ?? "[]") as Tab[];
-    if (saved.length > 0) return saved;
-  } catch {}
-  return [newTab(1)];
+function newTab(label = "New Chat"): Tab {
+  return { id: crypto.randomUUID(), label, messages: [] };
 }
 
 function renderInline(line: string) {
@@ -90,13 +85,10 @@ function ChartWidget({ artifact }: { artifact: ChartArtifact }) {
   );
 }
 
-const _blank = newTab(1);
-
 export default function Page() {
   const router = useRouter();
-  const [username, setUsername] = useState<string>("");
-  const [tabs, setTabs] = useState<Tab[]>([_blank]);
-  const [activeTabId, setActiveTabId] = useState<string>(_blank.id);
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string>("");
   const [closedTabs, setClosedTabs] = useState<Tab[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -113,17 +105,29 @@ export default function Page() {
     const token = localStorage.getItem("access_token");
     if (!token) { router.replace("/login"); return; }
     setUserRole(localStorage.getItem("user_role") ?? "");
-    const u = localStorage.getItem("username") ?? "";
-    setUsername(u);
-    if (u) {
-      const savedTabs = loadTabs(u);
-      setTabs(savedTabs);
-      setActiveTabId(savedTabs[0].id);
-      try {
-        const closed = JSON.parse(localStorage.getItem(`chat_closed_tabs_${u}`) ?? "[]") as Tab[];
-        setClosedTabs(closed);
-      } catch {}
-    }
+
+    const headers = { "Authorization": `Bearer ${token}` };
+    Promise.all([
+      fetch(`${BACKEND}/api/agent/sessions/`, { headers }).then(r => r.ok ? r.json() : []),
+      fetch(`${BACKEND}/api/agent/sessions/closed/`, { headers }).then(r => r.ok ? r.json() : []),
+    ]).then(([open, closed]: [{ id: string; label: string }[], { id: string; label: string }[]]) => {
+      const openTabs = open.map(s => ({ id: s.id, label: s.label, messages: [] as Message[] }));
+      const closedTabList = closed.map(s => ({ id: s.id, label: s.label, messages: [] as Message[] }));
+      if (openTabs.length > 0) {
+        setTabs(openTabs);
+        setActiveTabId(openTabs[0].id);
+      } else {
+        const t = newTab();
+        fetch(`${BACKEND}/api/agent/sessions/create/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({ id: t.id, label: t.label }),
+        }).catch(() => {});
+        setTabs([t]);
+        setActiveTabId(t.id);
+      }
+      setClosedTabs(closedTabList);
+    }).catch(() => {});
   }, [router]);
 
   function authHeader() {
@@ -162,7 +166,12 @@ export default function Page() {
   }
 
   function addTab() {
-    const t = newTab(tabs.length + 1);
+    const t = newTab();
+    fetch(`${BACKEND}/api/agent/sessions/create/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ id: t.id, label: t.label }),
+    }).catch(() => {});
     setTabs(prev => [...prev, t]);
     setActiveTabId(t.id);
     setExpandedSteps(new Set());
@@ -171,12 +180,22 @@ export default function Page() {
   function closeTab(id: string) {
     const closing = tabs.find(t => t.id === id);
     if (closing) {
-      setClosedTabs(c => [closing, ...c].slice(0, 10));
+      fetch(`${BACKEND}/api/agent/sessions/${id}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({ is_closed: true }),
+      }).catch(() => {});
+      setClosedTabs(c => [closing, ...c].slice(0, 20));
     }
     setTabs(prev => {
       const next = prev.filter(t => t.id !== id);
       if (next.length === 0) {
-        const t = newTab(1);
+        const t = newTab();
+        fetch(`${BACKEND}/api/agent/sessions/create/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeader() },
+          body: JSON.stringify({ id: t.id, label: t.label }),
+        }).catch(() => {});
         setActiveTabId(t.id);
         return [t];
       }
@@ -189,14 +208,23 @@ export default function Page() {
   }
 
   function restoreTab(tab: Tab) {
+    fetch(`${BACKEND}/api/agent/sessions/${tab.id}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ is_closed: false }),
+    }).catch(() => {});
     setClosedTabs(prev => prev.filter(t => t.id !== tab.id));
-    setTabs(prev => [...prev, tab]);
+    setTabs(prev => [...prev, { ...tab, messages: [] }]);
     setActiveTabId(tab.id);
     setExpandedSteps(new Set());
     setHistoryOpen(false);
   }
 
   function deleteClosedTab(id: string) {
+    fetch(`${BACKEND}/api/agent/sessions/${id}/`, {
+      method: "DELETE",
+      headers: authHeader(),
+    }).catch(() => {});
     setClosedTabs(prev => prev.filter(t => t.id !== id));
   }
 
@@ -206,14 +234,19 @@ export default function Page() {
   }
 
   useEffect(() => {
-    if (!username) return;
-    try { localStorage.setItem(`chat_tabs_${username}`, JSON.stringify(tabs)); } catch {}
-  }, [tabs, username]);
-
-  useEffect(() => {
-    if (!username) return;
-    try { localStorage.setItem(`chat_closed_tabs_${username}`, JSON.stringify(closedTabs)); } catch {}
-  }, [closedTabs, username]);
+    if (!activeTabId) return;
+    fetch(`${BACKEND}/api/agent/sessions/${activeTabId}/messages/`, { headers: authHeader() })
+      .then(r => r.ok ? r.json() : [])
+      .then((rows: { role: string; content: string; artifacts: Artifact[] }[]) => {
+        if (rows.length === 0) return;
+        setTabs(prev => prev.map(t =>
+          t.id === activeTabId
+            ? { ...t, messages: rows.map(r => ({ role: r.role as "user" | "assistant", content: r.content, artifacts: r.artifacts })) }
+            : t
+        ));
+      })
+      .catch(() => {});
+  }, [activeTabId]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -281,6 +314,8 @@ export default function Page() {
           setLogs((prev) => [...prev, { content: event.content, timestamp: new Date().toLocaleTimeString() }]);
         } else if (event.type === "artifact") {
           localArtifacts = [...localArtifacts, event as Artifact];
+        } else if (event.type === "pdf") {
+          localArtifacts = [...localArtifacts, { artifact_type: "pdf", content: event.content, title: event.title, data: event.data } as PdfArtifact];
         } else if (event.type === "image") {
           const lastTable = [...localArtifacts].reverse().find(a => a.artifact_type === "table") as TableArtifact | undefined;
           localArtifacts = [...localArtifacts, { artifact_type: "image", content: event.content, columns: lastTable?.columns, rows: lastTable?.rows, title: lastTable?.title } as ImageArtifact];
@@ -290,6 +325,7 @@ export default function Page() {
             {
               action_id: event.action_id,
               summary: event.summary,
+              details: event.details ?? {},
               agent_name: "",
               timestamp: new Date().toISOString(),
             },
@@ -314,7 +350,13 @@ export default function Page() {
 
     const isFirst = (tabs.find(t => t.id === tabId)?.messages ?? []).length === 0;
     if (isFirst) {
-      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, label: userMessage.slice(0, 22) } : t));
+      const label = userMessage.slice(0, 22);
+      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, label } : t));
+      fetch(`${BACKEND}/api/agent/sessions/${tabId}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({ label }),
+      }).catch(() => {});
     }
 
     updateMessages(tabId, prev => [...prev, { role: "user", content: userMessage }]);
@@ -338,7 +380,8 @@ export default function Page() {
 
     const res = await fetch(`${BACKEND}/api/agent/confirm/${action.action_id}/`, {
       method: "POST",
-      headers: authHeader(),
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ session_key: tabId }),
     });
 
     await readStream(res, tabId);
@@ -348,7 +391,11 @@ export default function Page() {
   async function cancel(action: PendingAction) {
     const tabId = activeTabId;
     setPendingActions((prev) => prev.filter((a) => a.action_id !== action.action_id));
-    await fetch(`${BACKEND}/api/agent/cancel/${action.action_id}/`, { method: "POST", headers: authHeader() });
+    await fetch(`${BACKEND}/api/agent/cancel/${action.action_id}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ session_key: tabId }),
+    });
     updateMessages(tabId, prev => [...prev, { role: "assistant", content: "Action cancelled." }]);
   }
 
@@ -356,6 +403,8 @@ export default function Page() {
     <div className="flex flex-col h-screen bg-gray-950 text-gray-100">
       <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 text-xs shrink-0">
         <Link href="/agents" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Agents</Link>
+        <span className="text-gray-700">|</span>
+        <Link href="/bots" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Bots</Link>
         {userRole === "admin" && (
           <>
             <span className="text-gray-700">|</span>
@@ -475,6 +524,74 @@ export default function Page() {
                       <ChartWidget artifact={artifact} />
                     </div>
                   )}
+                  {artifact.artifact_type === "pdf" && (() => {
+                    const po = artifact.data;
+                    return (
+                      <div className="text-xs text-gray-300">
+                        {po && (
+                          <>
+                            <div className="flex justify-between items-start px-4 pt-4 pb-2">
+                              <div>
+                                <p className="font-mono text-[10px] text-gray-500 uppercase tracking-widest mb-1">Purchase Order</p>
+                                <p className="text-gray-500 text-[10px]">{po.date}</p>
+                              </div>
+                              <p className="font-mono font-semibold text-gray-100 text-sm">{po.po_number}</p>
+                            </div>
+                            {po.vendor?.name && (
+                              <div className="px-4 pb-2">
+                                <p className="font-mono text-[10px] text-gray-500 uppercase tracking-widest mb-0.5">Vendor</p>
+                                <p className="text-gray-200">{po.vendor.name}</p>
+                              </div>
+                            )}
+                            {po.lines && po.lines.length > 0 && (
+                              <div className="mx-4 mb-2 border border-gray-700 rounded overflow-hidden">
+                                <table className="w-full text-[11px]">
+                                  <thead>
+                                    <tr className="bg-gray-800 text-gray-400 font-mono text-[9px] uppercase tracking-wider">
+                                      <th className="px-3 py-2 text-left">Product</th>
+                                      <th className="px-3 py-2 text-right">Qty</th>
+                                      <th className="px-3 py-2 text-right">Unit Price</th>
+                                      <th className="px-3 py-2 text-right">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {po.lines.map((line, li) => (
+                                      <tr key={li} className="border-t border-gray-700">
+                                        <td className="px-3 py-2">{line.product}</td>
+                                        <td className="px-3 py-2 text-right text-gray-400">{line.qty}</td>
+                                        <td className="px-3 py-2 text-right text-gray-400">{Number(line.unit_price).toFixed(2)}</td>
+                                        <td className="px-3 py-2 text-right">{Number(line.total).toFixed(2)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                            <div className="px-4 pb-3 flex flex-col items-end gap-0.5">
+                              {po.subtotal !== undefined && po.subtotal !== po.total && <p className="text-gray-500 text-[10px]">Subtotal <span className="text-gray-300 font-mono ml-2">{Number(po.subtotal).toFixed(2)}</span></p>}
+                              {po.tax !== undefined && <p className="text-gray-500 text-[10px]">Tax <span className="text-gray-300 font-mono ml-2">{Number(po.tax).toFixed(2)}</span></p>}
+                              {po.total !== undefined && <p className="text-gray-400 text-[11px] font-semibold">Total <span className="text-gray-100 font-mono ml-2">{Number(po.total).toFixed(2)}</span></p>}
+                            </div>
+                            <div className="border-t border-gray-700" />
+                          </>
+                        )}
+                        <div className="px-3 py-2.5 flex items-center justify-between">
+                          <span className="font-mono text-gray-500 text-[10px]">{artifact.title || "document"}.pdf</span>
+                          <button
+                            onClick={() => {
+                              const a = document.createElement("a");
+                              a.href = `data:application/pdf;base64,${artifact.content}`;
+                              a.download = `${artifact.title || "document"}.pdf`;
+                              a.click();
+                            }}
+                            className="text-[11px] text-gray-400 hover:text-gray-200 transition-colors"
+                          >
+                            Download PDF
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {artifact.artifact_type === "image" && (
                     <>
                       {artifact.columns && (
@@ -574,18 +691,34 @@ export default function Page() {
           {pendingActions.length > 0 && (
             <div className="space-y-2">
               {pendingActions.map((action) => (
-                <div key={action.action_id} className="bg-yellow-950/40 border border-yellow-800/50 rounded-lg px-3 py-2 space-y-2">
-                  <p className="text-xs text-yellow-400 leading-relaxed">{action.summary}</p>
-                  <div className="flex gap-2">
+                <div key={action.action_id} className="border border-yellow-800/50 rounded-lg overflow-hidden bg-gray-900">
+                  <div className="px-3 pt-2.5 pb-2 border-b border-yellow-900/40">
+                    <p className="text-[10px] font-mono text-yellow-600 uppercase tracking-widest">{action.agent_name || "Awaiting Confirmation"}</p>
+                  </div>
+                  {action.details && Object.keys(action.details).length > 0 ? (
+                    <div className="px-3 py-2 space-y-1.5">
+                      {Object.entries(action.details).map(([k, v]) => (
+                        <div key={k} className="flex justify-between items-center">
+                          <span className="text-[10px] text-gray-500 font-mono capitalize">{k.replace(/_/g, " ")}</span>
+                          <span className="text-[11px] text-gray-200 font-mono">{String(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-3 py-2">
+                      <p className="text-xs text-gray-400 leading-relaxed">{action.summary}</p>
+                    </div>
+                  )}
+                  <div className="flex border-t border-yellow-900/40">
                     <button
-                      className="flex-1 px-2 py-1 text-xs bg-gray-700 rounded hover:bg-gray-600 transition-colors"
+                      className="flex-1 px-2 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors border-r border-yellow-900/40"
                       onClick={() => cancel(action)}
                       disabled={loading}
                     >
                       Cancel
                     </button>
                     <button
-                      className="flex-1 px-2 py-1 text-xs bg-green-700 rounded hover:bg-green-600 transition-colors"
+                      className="flex-1 px-2 py-1.5 text-xs text-green-400 hover:bg-green-900/30 transition-colors"
                       onClick={() => confirm(action)}
                       disabled={loading}
                     >

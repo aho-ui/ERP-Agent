@@ -8,8 +8,9 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 const BACKEND = "http://localhost:8000";
 
 type ArtifactItem =
-  | { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string }
+  | { artifact_type: "table"; columns: string[]; rows: string[][]; title?: string }
   | { artifact_type: "chart"; chart_type: "bar" | "line" | "pie"; title: string; x_key?: string; series?: { key: string; label: string }[]; data: Record<string, unknown>[] }
+  | { artifact_type: "pdf"; title: string; content?: string; data?: Record<string, unknown> }
   | { artifact_type: string; [key: string]: unknown };
 
 type LogRow = {
@@ -17,7 +18,7 @@ type LogRow = {
   intent: string;
   agent_name: string;
   tool_called: string;
-  status: "success" | "failed" | "pending";
+  status: "success" | "failed" | "pending" | "approved";
   timestamp: string;
   output: Record<string, unknown>;
   artifacts: ArtifactItem[];
@@ -27,6 +28,7 @@ const STATUS_STYLES: Record<string, string> = {
   success: "text-green-400",
   failed: "text-red-400",
   pending: "text-yellow-400",
+  approved: "text-blue-400",
 };
 
 const CHART_COLORS = ["#6366f1", "#22d3ee", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
@@ -100,7 +102,7 @@ export default function LogsPage() {
     if (localStorage.getItem("user_role") !== "admin") { router.replace("/"); return; }
     fetch(`${BACKEND}/api/agent/logs/`, { headers: { "Authorization": `Bearer ${token}` } })
       .then((r) => r.json())
-      .then(setLogs)
+      .then(data => Array.isArray(data) ? setLogs(data) : {})
       .catch(() => {});
   }, [router]);
 
@@ -115,6 +117,24 @@ export default function LogsPage() {
       </div>
 
       <div className="px-6 py-6">
+        <div className="flex justify-end mb-3">
+          <button
+            onClick={() => {
+              const token = localStorage.getItem("access_token") ?? "";
+              fetch(`${BACKEND}/api/agent/logs/export/`, { headers: { "Authorization": `Bearer ${token}` } })
+                .then(r => r.blob())
+                .then(blob => {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = "audit_log.csv"; a.click();
+                  URL.revokeObjectURL(url);
+                });
+            }}
+            className="text-xs text-gray-400 hover:text-gray-200 transition-colors border border-gray-700 px-3 py-1.5 rounded"
+          >
+            Export CSV
+          </button>
+        </div>
         <div className="rounded-lg border border-gray-800 overflow-hidden">
           <table className="w-full text-sm text-left">
             <thead className="bg-gray-800 text-gray-400 text-xs uppercase">
@@ -157,13 +177,16 @@ export default function LogsPage() {
                   {expanded === log.id && (
                     <tr key={`${log.id}-expanded`} className="border-t border-gray-800 bg-gray-900/30">
                       <td colSpan={6} className="px-4 py-4 space-y-4">
-                        {log.output?.tokens && (
-                          <div className="flex gap-4 text-xs font-mono text-gray-500">
-                            <span>prompt <span className="text-gray-300">{(log.output.tokens as {prompt:number}).prompt}</span></span>
-                            <span>completion <span className="text-gray-300">{(log.output.tokens as {completion:number}).completion}</span></span>
-                            <span>total <span className="text-gray-300">{(log.output.tokens as {total:number}).total}</span></span>
-                          </div>
-                        )}
+                        {!!log.output?.tokens && (() => {
+                          const t = log.output.tokens as { prompt: number; completion: number; total: number };
+                          return (
+                            <div className="flex gap-4 text-xs font-mono text-gray-500">
+                              <span>prompt <span className="text-gray-300">{t.prompt}</span></span>
+                              <span>completion <span className="text-gray-300">{t.completion}</span></span>
+                              <span>total <span className="text-gray-300">{t.total}</span></span>
+                            </div>
+                          );
+                        })()}
                         <pre className="text-xs text-gray-400 whitespace-pre-wrap font-mono">
                           {JSON.stringify(log.output, null, 2)}
                         </pre>
@@ -177,6 +200,29 @@ export default function LogsPage() {
                                     <div className="p-3">
                                       {a.title && <p className="text-xs text-gray-400 mb-2">{a.title}</p>}
                                       <LogChartWidget artifact={a} />
+                                    </div>
+                                  );
+                                })()}
+                                {artifact.artifact_type === "pdf" && (() => {
+                                  const p = artifact as Extract<ArtifactItem, { artifact_type: "pdf" }>;
+                                  return (
+                                    <div className="flex items-center justify-between px-3 py-2">
+                                      <span className="text-xs text-gray-400 font-mono">{p.title}.pdf</span>
+                                      {p.content && (
+                                        <button
+                                          onClick={() => {
+                                            const bytes = Uint8Array.from(atob(p.content!), c => c.charCodeAt(0));
+                                            const blob = new Blob([bytes], { type: "application/pdf" });
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement("a");
+                                            a.href = url; a.download = `${p.title}.pdf`; a.click();
+                                            URL.revokeObjectURL(url);
+                                          }}
+                                          className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                                        >
+                                          Download PDF
+                                        </button>
+                                      )}
                                     </div>
                                   );
                                 })()}
