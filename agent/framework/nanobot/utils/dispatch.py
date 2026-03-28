@@ -217,7 +217,7 @@ class DispatchTool(Tool):
             if result.confirmation_required:
                 await AgentAction.objects.filter(id=action.id).aupdate(
                     tool_called=tools_used,
-                    output={"pending_summary": result.summary, "tokens": tokens},
+                    output={"pending_summary": result.summary, "details": result.details, "tokens": tokens},
                 )
             else:
                 await AgentAction.objects.filter(id=action.id).aupdate(

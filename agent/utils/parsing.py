@@ -8,6 +8,7 @@ class ParseResult(NamedTuple):
     summary: str
     confirmation_required: bool
     artifacts: list
+    details: dict = {}
 
 
 def parse_agent_response(raw: str, agent_name: str, task: str, q, fallback: str, action_id=None) -> ParseResult:
@@ -24,6 +25,7 @@ def parse_agent_response(raw: str, agent_name: str, task: str, q, fallback: str,
         summary = parsed.get("summary", fallback)
 
         if parsed.get("confirmation_required"):
+            details = parsed.get("details", {}) or {}
             logger.info(f"[{agent_name}] confirmation required, queue={'found' if q else 'NOT FOUND'}")
             if q:
                 q.put_nowait({
@@ -31,9 +33,10 @@ def parse_agent_response(raw: str, agent_name: str, task: str, q, fallback: str,
                     "agent_name": agent_name,
                     "task": task,
                     "summary": summary,
+                    "details": details,
                     "action_id": str(action_id) if action_id else None,
                 })
-            return ParseResult(summary=summary, confirmation_required=True, artifacts=[])
+            return ParseResult(summary=summary, confirmation_required=True, artifacts=[], details=details)
 
         collected: list = []
 
@@ -71,6 +74,20 @@ def parse_agent_response(raw: str, agent_name: str, task: str, q, fallback: str,
                     logger.warning(f"[{agent_name}] table image render failed: {e}")
         else:
             logger.info(f"[{agent_name}] no records in response, summary only")
+
+        po_data = parsed.get("po")
+        if po_data and isinstance(po_data, dict):
+            try:
+                import base64
+                from agent.utils.documents.po import generate_po_pdf
+                pdf_bytes = generate_po_pdf(po_data)
+                title = po_data.get("po_number", "po")
+                logger.info(f"[{agent_name}] emitting pdf artifact: {title}")
+                collected.append({"artifact_type": "pdf", "title": title, "data": po_data, "content": base64.b64encode(pdf_bytes).decode()})
+                if q:
+                    q.put_nowait({"type": "pdf", "content": base64.b64encode(pdf_bytes).decode(), "title": title, "data": po_data})
+            except Exception as e:
+                logger.warning(f"[{agent_name}] PO PDF generation failed: {e}")
 
         return ParseResult(summary=summary, confirmation_required=False, artifacts=collected)
     except Exception as e:

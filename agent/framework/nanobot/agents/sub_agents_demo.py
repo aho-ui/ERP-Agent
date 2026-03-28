@@ -17,9 +17,22 @@ _RESPONSE_FORMAT = (
     "Example: {\"title\": \"Top Sales Orders\", \"summary\": \"Found 3 purchase orders.\", \"records\": [{\"name\": \"P00001\", \"amount_total\": 500.0}]}"
 )
 
+_PO_FORMAT = (
+    "\nOVERRIDE for purchase order creation (takes precedence over single-operation format above): "
+    "After calling create_purchase_order, you MUST call get_purchase_orders to fetch the created PO and retrieve its name and date. "
+    "Then return this exact structure: "
+    "{\"summary\": \"...\", \"po\": {\"po_number\": \"<name from fetched PO>\", \"date\": \"<date_order>\", "
+    "\"vendor\": {\"name\": \"<partner_name>\"}, "
+    "\"lines\": [{\"product\": \"<product name used>\", \"qty\": <qty used>, \"unit_price\": <price used>, \"total\": <amount_total>}], "
+    "\"subtotal\": <amount_total>, \"total\": <amount_total>}}\n"
+    "Do NOT return just {\"summary\": ...} for purchase order creation. Always include the po key."
+)
+
 _WRITE_FORMAT = (
     "\nFor write operations (any create_* tool): first gather all required data using read tools, "
-    "then STOP and return {\"confirmation_required\": true, \"summary\": \"<one sentence starting with 'Awaiting confirmation to create...' with all key details>\"} "
+    "then STOP and return {\"confirmation_required\": true, \"summary\": \"<one sentence starting with 'Awaiting confirmation to create...' with all key details>\", "
+    "\"details\": {\"<key>\": \"<value>\"}} "
+    "where details contains the key operation parameters (e.g. vendor, product, quantity, unit_price, total). "
     "WITHOUT calling the write tool. Only call the write tool if the task explicitly contains the word 'CONFIRMED'."
 )
 
@@ -33,6 +46,7 @@ AGENTS = [
             "Focus only on purchase orders and vendor data. Be concise and accurate."
             + _RESPONSE_FORMAT
             + _WRITE_FORMAT
+            + _PO_FORMAT
         ),
         "allowed_tools": [
             "mcp_sqlite_get_purchase_orders",
