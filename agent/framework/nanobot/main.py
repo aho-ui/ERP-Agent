@@ -16,6 +16,9 @@ _healthy_servers: set[str] = set()
 
 _user_role: ContextVar[str] = ContextVar("user_role", default="viewer")
 _user_id: ContextVar[str | None] = ContextVar("user_id", default=None)
+_run_id: ContextVar[str | None] = ContextVar("run_id", default=None)
+_source: ContextVar[str] = ContextVar("source", default="web")
+_bot_id: ContextVar[str | None] = ContextVar("bot_id", default=None)
 
 
 def _tool_call_sink(message):

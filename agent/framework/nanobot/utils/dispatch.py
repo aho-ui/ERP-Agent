@@ -77,12 +77,15 @@ class DispatchTool(Tool):
             )
         ]
         from agent.models import AgentAction, AgentTemplate
-        from agent.framework.nanobot.main import _user_role, _user_id, _task_queues
+        from agent.framework.nanobot.main import _user_role, _user_id, _task_queues, _run_id, _source, _bot_id
 
         db_template = await AgentTemplate.objects.filter(name=agent_name, is_active=True).afirst()
         if db_template:
             template = {"name": db_template.name, "system_prompt": db_template.instructions, "allowed_tools": db_template.allowed_tools}
         else:
+            disabled = await AgentTemplate.objects.filter(name=agent_name, is_active=False).afirst()
+            if disabled:
+                return f"Error: Agent '{agent_name}' is currently disabled."
             template = next((a for a in AGENTS if a["name"] == agent_name), None)
         if not template:
             builtin_names = [a["name"] for a in AGENTS]
@@ -96,6 +99,9 @@ class DispatchTool(Tool):
                 return f"Access denied: your role (viewer) cannot perform write operations."
 
         action = await AgentAction.objects.acreate(
+            run_id=_run_id.get(),
+            source=_source.get(),
+            bot_id=_bot_id.get(),
             user_id=_user_id.get(),
             intent=task[:500],
             agent_name=agent_name,

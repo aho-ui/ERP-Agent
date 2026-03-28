@@ -42,6 +42,8 @@ async def run(token: str, bot_id: str, role: str):
 
         _agent._user_role.set(role)
         _agent._user_id.set(None)
+        _agent._source.set("discord")
+        _agent._bot_id.set(bot_id)
 
         async with message.channel.typing():
             try:

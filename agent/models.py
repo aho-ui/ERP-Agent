@@ -86,7 +86,16 @@ class AgentAction(models.Model):
         PENDING = "pending", "Pending"
         APPROVED = "approved", "Approved"
 
+    class Source(models.TextChoices):
+        WEB = "web", "Web"
+        DISCORD = "discord", "Discord"
+        TELEGRAM = "telegram", "Telegram"
+        SYSTEM = "system", "System"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run_id = models.UUIDField(null=True, blank=True, db_index=True)
+    source = models.CharField(max_length=20, choices=Source.choices, default=Source.WEB)
+    bot = models.ForeignKey("BotInstance", on_delete=models.SET_NULL, null=True, blank=True, related_name="actions")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="audit_logs")
     intent = models.CharField(max_length=500)
     agent_name = models.CharField(max_length=255)

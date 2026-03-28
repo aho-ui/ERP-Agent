@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import uuid
 
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -45,6 +46,9 @@ get_agent_loop = _agent.get_agent_loop
 _task_queues = _agent._task_queues
 _user_role = _agent._user_role
 _user_id = _agent._user_id
+_run_id = _agent._run_id
+_source = _agent._source
+_bot_id = _agent._bot_id
 
 
 @csrf_exempt
@@ -66,6 +70,9 @@ async def chat(request):
     session_key = body.get("session_key", "api:default")
     _user_role.set(role)
     _user_id.set(user_id)
+    _run_id.set(str(uuid.uuid4()))
+    _source.set("web")
+    _bot_id.set(None)
     queue = _CollectingQueue()
 
     await _save_message(session_key, user_id, ChatMessage.Role.USER, message)
