@@ -2,7 +2,7 @@ from django.urls import path
 from agent.api.chat import chat, confirm_action, cancel_action, pending_actions, action_status
 from agent.api.sessions import list_sessions, list_closed_sessions, create_session, update_session, session_messages
 from agent.api.logs import agent_logs, export_logs
-from agent.api.templates import agent_templates, agent_template_detail, available_tools
+from agent.api.templates import agent_templates, agent_template_detail, available_tools, toggle_agent
 from agent.api.export import export
 from agent.api.health import mcp_health
 from agent.api.documents import po_document
@@ -23,6 +23,7 @@ urlpatterns = [
     path("logs/", agent_logs, name="agent-logs"),
     path("logs/export/", export_logs, name="agent-logs-export"),
     path("templates/", agent_templates, name="agent-templates"),
+    path("templates/toggle/", toggle_agent, name="agent-templates-toggle"),
     path("templates/tools/", available_tools, name="agent-available-tools"),
     path("templates/<uuid:template_id>/", agent_template_detail, name="agent-template-detail"),
     path("documents/po/", po_document, name="document-po"),

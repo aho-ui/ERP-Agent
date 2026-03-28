@@ -13,6 +13,7 @@ type AgentItem = {
   description?: string;
   allowed_tools: string[];
   builtin: boolean;
+  is_active: boolean;
   created_at?: string;
 };
 
@@ -46,6 +47,7 @@ export default function AgentsPage() {
   const [fInstructions, setFInstructions] = useState("");
   const [fTools, setFTools] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [toggling, setToggling] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAgents();
@@ -117,6 +119,17 @@ export default function AgentsPage() {
     }
   }
 
+  async function toggleActive(agent: AgentItem) {
+    setToggling(agent.name);
+    await fetch(`${BACKEND}/api/agent/templates/toggle/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ name: agent.name, enabled: !agent.is_active }),
+    });
+    await fetchAgents();
+    setToggling(null);
+  }
+
   async function remove(agent: AgentItem) {
     if (!agent.id) return;
     await fetch(`${BACKEND}/api/agent/templates/${agent.id}/`, { method: "DELETE", headers: authHeader() });
@@ -153,10 +166,10 @@ export default function AgentsPage() {
             {agents.map(agent => (
               <div
                 key={agent.id ?? agent.name}
-                className={`group flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-gray-800 ${selected?.name === agent.name && !creating ? "bg-gray-800" : ""}`}
+                className={`group flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-gray-800 ${selected?.name === agent.name && !creating ? "bg-gray-800" : ""} ${!agent.is_active ? "opacity-40" : ""}`}
                 onClick={() => openEdit(agent)}
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-200 truncate">{agent.name}</span>
                     {agent.builtin && (
@@ -167,14 +180,25 @@ export default function AgentsPage() {
                     <p className="text-xs text-gray-500 truncate mt-0.5">{agent.description}</p>
                   )}
                 </div>
-                {!agent.builtin && userRole === "admin" && (
-                  <button
-                    className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 text-sm transition-colors shrink-0 ml-2"
-                    onClick={e => { e.stopPropagation(); remove(agent); }}
-                  >
-                    ×
-                  </button>
-                )}
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  {userRole === "admin" && (
+                    <button
+                      disabled={toggling === agent.name}
+                      onClick={e => { e.stopPropagation(); toggleActive(agent); }}
+                      className={`relative w-8 h-4 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${agent.is_active ? "bg-blue-600" : "bg-gray-700"}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${agent.is_active ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  )}
+                  {!agent.builtin && userRole === "admin" && (
+                    <button
+                      className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 text-sm transition-colors"
+                      onClick={e => { e.stopPropagation(); remove(agent); }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

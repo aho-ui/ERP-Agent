@@ -21,14 +21,18 @@ async def agent_templates(request):
         _, _, err = await require_auth(request)
         if err:
             return err
-        db_names = set()
+        db_templates = {}
+        async for r in AgentTemplate.objects.order_by("created_at").values("id", "name", "type", "instructions", "allowed_tools", "is_active", "created_at"):
+            db_templates[r["name"]] = r
         results = []
-        async for r in AgentTemplate.objects.filter(is_active=True).order_by("created_at").values("id", "name", "type", "instructions", "allowed_tools", "created_at"):
-            db_names.add(r["name"])
-            results.append({"id": str(r["id"]), "name": r["name"], "type": r["type"], "instructions": r["instructions"], "allowed_tools": r["allowed_tools"], "created_at": r["created_at"].isoformat(), "builtin": False})
+        for name, r in db_templates.items():
+            if r["type"] != "builtin_stub":
+                results.append({"id": str(r["id"]), "name": r["name"], "type": r["type"], "instructions": r["instructions"], "allowed_tools": r["allowed_tools"], "is_active": r["is_active"], "created_at": r["created_at"].isoformat(), "builtin": False})
         for a in AGENTS:
-            if a["name"] not in db_names:
-                results.append({"id": None, "name": a["name"], "type": "builtin", "description": a.get("description", ""), "system_prompt": a.get("system_prompt", ""), "allowed_tools": a["allowed_tools"], "builtin": True})
+            if a["name"] not in db_templates:
+                results.append({"id": None, "name": a["name"], "type": "builtin", "description": a.get("description", ""), "system_prompt": a.get("system_prompt", ""), "allowed_tools": a["allowed_tools"], "builtin": True, "is_active": True})
+            elif db_templates[a["name"]]["type"] == "builtin_stub":
+                results.append({"id": str(db_templates[a["name"]]["id"]), "name": a["name"], "type": "builtin", "description": a.get("description", ""), "system_prompt": a.get("system_prompt", ""), "allowed_tools": a["allowed_tools"], "builtin": True, "is_active": False})
         return JsonResponse(results, safe=False)
 
     if request.method == "POST":
@@ -73,6 +77,38 @@ async def agent_template_detail(request, template_id):
         return JsonResponse({"status": "deleted"})
 
     return JsonResponse({"error": "Method not allowed"}, status=405)
+
+
+@csrf_exempt
+async def toggle_agent(request):
+    _, _, err = await require_auth(request, admin_only=True)
+    if err:
+        return err
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    name = body.get("name", "").strip()
+    enabled = body.get("enabled", True)
+    if not name:
+        return JsonResponse({"error": "name is required"}, status=400)
+
+    AGENTS = _get_agents()
+    is_builtin = any(a["name"] == name for a in AGENTS)
+
+    if is_builtin:
+        if not enabled:
+            await AgentTemplate.objects.aupdate_or_create(
+                name=name,
+                defaults={"type": "builtin_stub", "instructions": "", "allowed_tools": [], "is_active": False},
+            )
+        else:
+            await AgentTemplate.objects.filter(name=name, type="builtin_stub").adelete()
+    else:
+        await AgentTemplate.objects.filter(name=name).aupdate(is_active=enabled)
+
+    return JsonResponse({"name": name, "is_active": enabled})
 
 
 async def available_tools(request):
