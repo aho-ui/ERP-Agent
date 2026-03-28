@@ -28,7 +28,7 @@ BOT_API_KEY = os.getenv("BOT_API_KEY", "")
 logging.basicConfig(level=logging.INFO)
 
 
-async def _call_agent(message: str, session_key: str) -> tuple[str, list[bytes]]:
+async def _call_agent(message: str, session_key: str) -> tuple[str, list[bytes], list[tuple[bytes, str]]]:
     headers = {
         "Content-Type": "application/json",
         "X-API-Key": BOT_API_KEY,
@@ -37,6 +37,7 @@ async def _call_agent(message: str, session_key: str) -> tuple[str, list[bytes]]
 
     collected_text: list[str] = []
     collected_images: list[bytes] = []
+    collected_pdfs: list[tuple[bytes, str]] = []
     async with aiohttp.ClientSession() as session:
         async with session.post(
             f"{BACKEND_URL}/api/agent/chat/",
@@ -60,11 +61,13 @@ async def _call_agent(message: str, session_key: str) -> tuple[str, list[bytes]]
                             collected_text.append(event.get("content", ""))
                         elif event.get("type") == "image":
                             collected_images.append(base64.b64decode(event["content"]))
+                        elif event.get("type") == "pdf":
+                            collected_pdfs.append((base64.b64decode(event["content"]), event.get("title", "document")))
                     except json.JSONDecodeError:
                         pass
 
     text = "\n".join(collected_text) if collected_text else "No response from agent."
-    return text, collected_images
+    return text, collected_images, collected_pdfs
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,11 +78,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session_key = f"telegram:{update.effective_user.id}"
 
     await update.message.chat.send_action("typing")
-    reply, images = await _call_agent(message, session_key)
+    reply, images, pdfs = await _call_agent(message, session_key)
     await update.message.reply_text(reply)
     for i, img_bytes in enumerate(images):
         # await update.message.reply_photo(io.BytesIO(img_bytes))
         await update.message.reply_document(document=io.BytesIO(img_bytes), filename=f"table_{i+1}.png")
+    for pdf_bytes, title in pdfs:
+        await update.message.reply_document(document=io.BytesIO(pdf_bytes), filename=f"{title}.pdf")
 
 
 def main():

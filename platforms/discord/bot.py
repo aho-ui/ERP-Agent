@@ -78,7 +78,7 @@ client = discord.Client(intents=intents)
 #     return chunks
 
 
-async def _call_agent(message: str, session_key: str) -> tuple[str, list[bytes]]:
+async def _call_agent(message: str, session_key: str) -> tuple[str, list[bytes], list[tuple[bytes, str]]]:
     headers = {
         "Content-Type": "application/json",
         "X-API-Key": BOT_API_KEY,
@@ -87,6 +87,7 @@ async def _call_agent(message: str, session_key: str) -> tuple[str, list[bytes]]
 
     collected_text: list[str] = []
     collected_images: list[bytes] = []
+    collected_pdfs: list[tuple[bytes, str]] = []
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
@@ -111,11 +112,13 @@ async def _call_agent(message: str, session_key: str) -> tuple[str, list[bytes]]
                             collected_text.append(event.get("content", ""))
                         elif event.get("type") == "image":
                             collected_images.append(base64.b64decode(event["content"]))
+                        elif event.get("type") == "pdf":
+                            collected_pdfs.append((base64.b64decode(event["content"]), event.get("title", "document")))
                     except json.JSONDecodeError:
                         pass
 
     text = "\n".join(collected_text) if collected_text else "No response from agent."
-    return text, collected_images
+    return text, collected_images, collected_pdfs
 
 
 @client.event
@@ -140,12 +143,14 @@ async def on_message(message: discord.Message):
     session_key = f"discord:{message.author.id}"
 
     async with message.channel.typing():
-        reply, images = await _call_agent(text, session_key)
+        reply, images, pdfs = await _call_agent(text, session_key)
 
     await message.reply(reply[:2000])
 
     for i, img_bytes in enumerate(images):
         await message.channel.send(file=discord.File(io.BytesIO(img_bytes), filename=f"table_{i+1}.png"))
+    for pdf_bytes, title in pdfs:
+        await message.channel.send(file=discord.File(io.BytesIO(pdf_bytes), filename=f"{title}.pdf"))
 
     # for artifact in artifacts:
     #     for chunk in _table_chunks(artifact):
