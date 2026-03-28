@@ -1,5 +1,12 @@
 from django.urls import path
-from agent.views import chat, mcp_health, confirm_action, cancel_action, pending_actions, agent_logs, agent_templates, agent_template_detail, available_tools, export
+from agent.api.chat import chat, confirm_action, cancel_action, pending_actions, action_status
+from agent.api.sessions import list_sessions, list_closed_sessions, create_session, update_session, session_messages
+from agent.api.logs import agent_logs, export_logs
+from agent.api.templates import agent_templates, agent_template_detail, available_tools
+from agent.api.export import export
+from agent.api.health import mcp_health
+from agent.api.documents import po_document
+from agent.api.bots import list_bots, create_bot, update_bot, list_bot_sessions, bot_chat
 
 urlpatterns = [
     path("chat/", chat, name="agent-chat"),
@@ -7,12 +14,25 @@ urlpatterns = [
     path("confirm/<uuid:action_id>/", confirm_action, name="agent-confirm"),
     path("cancel/<uuid:action_id>/", cancel_action, name="agent-cancel"),
     path("pending/", pending_actions, name="agent-pending"),
+    path("actions/<uuid:action_id>/", action_status, name="agent-action-status"),
+    path("sessions/", list_sessions, name="agent-sessions-list"),
+    path("sessions/closed/", list_closed_sessions, name="agent-sessions-closed"),
+    path("sessions/create/", create_session, name="agent-sessions-create"),
+    path("sessions/<uuid:session_id>/", update_session, name="agent-sessions-update"),
+    path("sessions/<uuid:session_id>/messages/", session_messages, name="agent-session-messages"),
     path("logs/", agent_logs, name="agent-logs"),
+    path("logs/export/", export_logs, name="agent-logs-export"),
     path("templates/", agent_templates, name="agent-templates"),
     path("templates/tools/", available_tools, name="agent-available-tools"),
     path("templates/<uuid:template_id>/", agent_template_detail, name="agent-template-detail"),
+    path("documents/po/", po_document, name="document-po"),
     path("export/", export, name="agent-export"),
     path("export/csv/", export, name="agent-export-csv"),
     path("export/pdf/", export, name="agent-export-pdf"),
     path("export/xlsx/", export, name="agent-export-xlsx"),
+    path("bots/", list_bots, name="agent-bots-list"),
+    path("bots/create/", create_bot, name="agent-bots-create"),
+    path("bots/<uuid:bot_id>/", update_bot, name="agent-bots-update"),
+    path("bots/<uuid:bot_id>/sessions/", list_bot_sessions, name="agent-bots-sessions"),
+    path("bots/<uuid:bot_id>/sessions/<uuid:session_id>/chat/", bot_chat, name="agent-bots-chat"),
 ]
