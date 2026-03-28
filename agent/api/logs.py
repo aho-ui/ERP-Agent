@@ -26,11 +26,13 @@ async def agent_logs(request):
     if err:
         return err
     rows = AgentAction.objects.order_by("-timestamp").values(
-        "id", "intent", "agent_name", "tool_called", "status", "timestamp", "output", "artifacts"
+        "id", "run_id", "source", "intent", "agent_name", "tool_called", "status", "timestamp", "output", "artifacts"
     )
     results = [
         {
             "id": str(r["id"]),
+            "run_id": str(r["run_id"]) if r["run_id"] else None,
+            "source": r["source"],
             "intent": r["intent"],
             "agent_name": r["agent_name"],
             "tool_called": r["tool_called"],

@@ -15,6 +15,8 @@ type ArtifactItem =
 
 type LogRow = {
   id: string;
+  run_id: string | null;
+  source: string;
   intent: string;
   agent_name: string;
   tool_called: string;
@@ -22,6 +24,11 @@ type LogRow = {
   timestamp: string;
   output: Record<string, unknown>;
   artifacts: ArtifactItem[];
+};
+
+type LogGroup = {
+  run_id: string | null;
+  rows: LogRow[];
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -91,10 +98,96 @@ async function downloadExport(type: "csv" | "pdf", artifact: Extract<ArtifactIte
   URL.revokeObjectURL(url);
 }
 
+function SingleLogRow({ log, expanded, setExpanded }: { log: LogRow; expanded: string | null; setExpanded: (id: string | null) => void }) {
+  return (
+    <React.Fragment>
+      <tr
+        className="border-t border-gray-800 hover:bg-gray-900/50 cursor-pointer"
+        onClick={() => setExpanded(expanded === log.id ? null : log.id)}
+      >
+        <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap font-mono">{new Date(log.timestamp).toLocaleString()}</td>
+        <td className="px-4 py-3 text-xs text-gray-500 capitalize whitespace-nowrap">{log.source || "web"}</td>
+        <td className="px-4 py-3 text-xs text-gray-300 whitespace-nowrap">{log.agent_name || "—"}</td>
+        <td className="px-4 py-3 text-xs text-gray-200 max-w-xs truncate">{log.intent}</td>
+        <td className="px-4 py-3 text-xs text-gray-400 font-mono max-w-xs truncate">{log.tool_called || "—"}</td>
+        <td className={`px-4 py-3 text-xs font-medium ${STATUS_STYLES[log.status] ?? "text-gray-400"}`}>{log.status}</td>
+        <td className="px-4 py-3 text-xs text-gray-500"><span className="font-mono">{expanded === log.id ? "▾" : "▸"}</span></td>
+      </tr>
+      {expanded === log.id && (
+        <tr className="border-t border-gray-800 bg-gray-900/30">
+          <td colSpan={6} className="px-4 py-4 space-y-4">
+            {!!log.output?.tokens && (() => {
+              const t = log.output.tokens as { prompt: number; completion: number; total: number };
+              return (
+                <div className="flex gap-4 text-xs font-mono text-gray-500">
+                  <span>prompt <span className="text-gray-300">{t.prompt}</span></span>
+                  <span>completion <span className="text-gray-300">{t.completion}</span></span>
+                  <span>total <span className="text-gray-300">{t.total}</span></span>
+                </div>
+              );
+            })()}
+            <pre className="text-xs text-gray-400 whitespace-pre-wrap font-mono">{JSON.stringify(log.output, null, 2)}</pre>
+            {log.artifacts && log.artifacts.length > 0 && (
+              <div className="space-y-3">
+                {log.artifacts.map((artifact, ai) => (
+                  <div key={ai} className="rounded border border-gray-700">
+                    {artifact.artifact_type === "chart" && (() => {
+                      const a = artifact as Extract<ArtifactItem, { artifact_type: "chart" }>;
+                      return <div className="p-3">{a.title && <p className="text-xs text-gray-400 mb-2">{a.title}</p>}<LogChartWidget artifact={a} /></div>;
+                    })()}
+                    {artifact.artifact_type === "pdf" && (() => {
+                      const p = artifact as Extract<ArtifactItem, { artifact_type: "pdf" }>;
+                      return (
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <span className="text-xs text-gray-400 font-mono">{p.title}.pdf</span>
+                          {p.content && (
+                            <button onClick={() => { const bytes = Uint8Array.from(atob(p.content!), c => c.charCodeAt(0)); const blob = new Blob([bytes], { type: "application/pdf" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${p.title}.pdf`; a.click(); URL.revokeObjectURL(url); }} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download PDF</button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {artifact.artifact_type === "table" && (() => {
+                      const t = artifact as Extract<ArtifactItem, { artifact_type: "table" }>;
+                      return (
+                        <>
+                          <div className="flex justify-end gap-3 px-3 py-1.5 border-b border-gray-700">
+                            <button onClick={() => downloadExport("csv", t)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download CSV</button>
+                            <button onClick={() => downloadExport("pdf", t)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download PDF</button>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-left text-gray-300">
+                              <thead className="bg-gray-800 text-gray-400 uppercase">
+                                <tr>{t.columns.map(col => <th key={col} className="px-3 py-2 font-medium whitespace-nowrap">{col}</th>)}</tr>
+                              </thead>
+                              <tbody>
+                                {t.rows.map((row, ri) => (
+                                  <tr key={ri} className="border-t border-gray-700">
+                                    {(row as unknown[]).map((cell, ci) => <td key={ci} className="px-3 py-2 whitespace-nowrap">{cell === null || cell === undefined ? "—" : String(cell)}</td>)}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                ))}
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </React.Fragment>
+  );
+}
+
 export default function LogsPage() {
   const router = useRouter();
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -117,7 +210,18 @@ export default function LogsPage() {
       </div>
 
       <div className="px-6 py-6">
-        <div className="flex justify-end mb-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex gap-1">
+            {["all", "web", "discord", "telegram", "system"].map(s => (
+              <button
+                key={s}
+                onClick={() => setSourceFilter(s)}
+                className={`text-xs px-2.5 py-1 rounded transition-colors capitalize ${sourceFilter === s ? "bg-blue-600 text-white" : "text-gray-500 hover:text-gray-300 border border-gray-800"}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => {
               const token = localStorage.getItem("access_token") ?? "";
@@ -135,136 +239,90 @@ export default function LogsPage() {
             Export CSV
           </button>
         </div>
-        <div className="rounded-lg border border-gray-800 overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-800 text-gray-400 text-xs uppercase">
-              <tr>
-                <th className="px-4 py-3 font-medium">Timestamp</th>
-                <th className="px-4 py-3 font-medium">Agent</th>
-                <th className="px-4 py-3 font-medium">Intent</th>
-                <th className="px-4 py-3 font-medium">Tools Used</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Output</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-600 text-xs">
-                    No logs found.
-                  </td>
-                </tr>
-              )}
-              {logs.map((log) => (
-                <React.Fragment key={log.id}>
-                  <tr
-                    className="border-t border-gray-800 hover:bg-gray-900/50 cursor-pointer"
-                    onClick={() => setExpanded(expanded === log.id ? null : log.id)}
-                  >
-                    <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap font-mono">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-300 whitespace-nowrap">{log.agent_name || "—"}</td>
-                    <td className="px-4 py-3 text-xs text-gray-200 max-w-xs truncate">{log.intent}</td>
-                    <td className="px-4 py-3 text-xs text-gray-400 font-mono max-w-xs truncate">{log.tool_called || "—"}</td>
-                    <td className={`px-4 py-3 text-xs font-medium ${STATUS_STYLES[log.status] ?? "text-gray-400"}`}>
-                      {log.status}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
-                      <span className="font-mono">{expanded === log.id ? "▾" : "▸"}</span>
-                    </td>
-                  </tr>
-                  {expanded === log.id && (
-                    <tr key={`${log.id}-expanded`} className="border-t border-gray-800 bg-gray-900/30">
-                      <td colSpan={6} className="px-4 py-4 space-y-4">
-                        {!!log.output?.tokens && (() => {
-                          const t = log.output.tokens as { prompt: number; completion: number; total: number };
-                          return (
-                            <div className="flex gap-4 text-xs font-mono text-gray-500">
-                              <span>prompt <span className="text-gray-300">{t.prompt}</span></span>
-                              <span>completion <span className="text-gray-300">{t.completion}</span></span>
-                              <span>total <span className="text-gray-300">{t.total}</span></span>
-                            </div>
-                          );
-                        })()}
-                        <pre className="text-xs text-gray-400 whitespace-pre-wrap font-mono">
-                          {JSON.stringify(log.output, null, 2)}
-                        </pre>
-                        {log.artifacts && log.artifacts.length > 0 && (
-                          <div className="space-y-3">
-                            {log.artifacts.map((artifact, ai) => (
-                              <div key={ai} className="rounded border border-gray-700">
-                                {artifact.artifact_type === "chart" && (() => {
-                                  const a = artifact as Extract<ArtifactItem, { artifact_type: "chart" }>;
-                                  return (
-                                    <div className="p-3">
-                                      {a.title && <p className="text-xs text-gray-400 mb-2">{a.title}</p>}
-                                      <LogChartWidget artifact={a} />
-                                    </div>
-                                  );
-                                })()}
-                                {artifact.artifact_type === "pdf" && (() => {
-                                  const p = artifact as Extract<ArtifactItem, { artifact_type: "pdf" }>;
-                                  return (
-                                    <div className="flex items-center justify-between px-3 py-2">
-                                      <span className="text-xs text-gray-400 font-mono">{p.title}.pdf</span>
-                                      {p.content && (
-                                        <button
-                                          onClick={() => {
-                                            const bytes = Uint8Array.from(atob(p.content!), c => c.charCodeAt(0));
-                                            const blob = new Blob([bytes], { type: "application/pdf" });
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement("a");
-                                            a.href = url; a.download = `${p.title}.pdf`; a.click();
-                                            URL.revokeObjectURL(url);
-                                          }}
-                                          className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
-                                        >
-                                          Download PDF
-                                        </button>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                                {artifact.artifact_type === "table" && (() => {
-                                  const t = artifact as Extract<ArtifactItem, { artifact_type: "table" }>;
-                                  return (
-                                    <>
-                                    <div className="flex justify-end gap-3 px-3 py-1.5 border-b border-gray-700">
-                                      <button onClick={() => downloadExport("csv", t)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download CSV</button>
-                                      <button onClick={() => downloadExport("pdf", t)} className="text-xs text-gray-400 hover:text-gray-200 transition-colors">Download PDF</button>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                      <table className="w-full text-xs text-left text-gray-300">
-                                        <thead className="bg-gray-800 text-gray-400 uppercase">
-                                          <tr>{t.columns.map((col) => <th key={col} className="px-3 py-2 font-medium whitespace-nowrap">{col}</th>)}</tr>
-                                        </thead>
-                                        <tbody>
-                                          {t.rows.map((row, ri) => (
-                                            <tr key={ri} className="border-t border-gray-700">
-                                              {(row as unknown[]).map((cell, ci) => (
-                                                <td key={ci} className="px-3 py-2 whitespace-nowrap">{cell === null || cell === undefined ? "—" : String(cell)}</td>
-                                              ))}
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+        {logs.length === 0 && (
+          <p className="text-xs text-gray-600 text-center py-8">No logs found.</p>
+        )}
+
+        {(() => {
+          const filtered = sourceFilter === "all" ? logs : logs.filter(l => l.source === sourceFilter);
+          const groups: LogGroup[] = [];
+          const seen = new Map<string, LogGroup>();
+          for (const log of filtered) {
+            if (log.run_id) {
+              if (!seen.has(log.run_id)) {
+                const g: LogGroup = { run_id: log.run_id, rows: [] };
+                seen.set(log.run_id, g);
+                groups.push(g);
+              }
+              seen.get(log.run_id)!.rows.push(log);
+            } else {
+              groups.push({ run_id: null, rows: [log] });
+            }
+          }
+          return groups.map((group) => {
+            if (!group.run_id) {
+              const log = group.rows[0];
+              return (
+                <div key={log.id} className="mb-2 rounded-lg border border-gray-800 overflow-hidden">
+                  <table className="w-full text-sm text-left">
+                    <tbody>
+                      <SingleLogRow log={log} expanded={expanded} setExpanded={setExpanded} />
+                    </tbody>
+                  </table>
+                </div>
+              );
+            }
+            const isOpen = expandedGroups.has(group.run_id);
+            const first = group.rows[0];
+            const agents = [...new Set(group.rows.map(r => r.agent_name).filter(Boolean))].join(", ");
+            const overallStatus = group.rows.some(r => r.status === "failed") ? "failed"
+              : group.rows.some(r => r.status === "pending") ? "pending"
+              : group.rows.some(r => r.status === "approved") ? "approved"
+              : "success";
+            return (
+              <div key={group.run_id} className="mb-2 rounded-lg border border-gray-800 overflow-hidden">
+                <div
+                  className="flex items-center gap-3 px-4 py-3 bg-gray-900 cursor-pointer hover:bg-gray-800/80"
+                  onClick={() => setExpandedGroups(prev => {
+                    const next = new Set(prev);
+                    isOpen ? next.delete(group.run_id!) : next.add(group.run_id!);
+                    return next;
+                  })}
+                >
+                  <span className="text-gray-600 font-mono text-xs">{isOpen ? "▾" : "▸"}</span>
+                  <span className="text-xs text-gray-400 font-mono whitespace-nowrap">{new Date(first.timestamp).toLocaleString()}</span>
+                  <span className="text-xs text-gray-200 flex-1 truncate">{first.intent}</span>
+                  <span className="text-xs text-gray-500 shrink-0">{agents}</span>
+                  <span className="text-xs text-gray-600 shrink-0">{group.rows.length} action{group.rows.length !== 1 ? "s" : ""}</span>
+                  <span className={`text-xs font-medium shrink-0 ${STATUS_STYLES[overallStatus] ?? "text-gray-400"}`}>{overallStatus}</span>
+                </div>
+                {isOpen && (
+                  <div className="border-t border-gray-800">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-gray-800/50 text-gray-500 text-xs uppercase">
+                        <tr>
+                          <th className="px-4 py-2 font-medium">Timestamp</th>
+                          <th className="px-4 py-2 font-medium">Source</th>
+                          <th className="px-4 py-2 font-medium">Agent</th>
+                          <th className="px-4 py-2 font-medium">Intent</th>
+                          <th className="px-4 py-2 font-medium">Tools Used</th>
+                          <th className="px-4 py-2 font-medium">Status</th>
+                          <th className="px-4 py-2 font-medium">Output</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.rows.map(log => (
+                          <SingleLogRow key={log.id} log={log} expanded={expanded} setExpanded={setExpanded} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
       </div>
 
     </div>
