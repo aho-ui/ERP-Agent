@@ -7,6 +7,8 @@ from agent.api.export import export
 from agent.api.health import mcp_health
 from agent.api.documents import po_document
 from agent.api.bots import list_bots, create_bot, update_bot, list_bot_sessions, bot_chat
+# from agent.api.bots import bot_progress
+from agent.api.dashboard import dashboard, dashboard_calls
 
 urlpatterns = [
     path("chat/", chat, name="agent-chat"),
@@ -36,4 +38,7 @@ urlpatterns = [
     path("bots/<uuid:bot_id>/", update_bot, name="agent-bots-update"),
     path("bots/<uuid:bot_id>/sessions/", list_bot_sessions, name="agent-bots-sessions"),
     path("bots/<uuid:bot_id>/sessions/<uuid:session_id>/chat/", bot_chat, name="agent-bots-chat"),
+    # path("bots/<uuid:bot_id>/progress/", bot_progress, name="agent-bots-progress"),
+    path("dashboard/", dashboard, name="agent-dashboard"),
+    path("dashboard/calls/", dashboard_calls, name="agent-dashboard-calls"),
 ]
