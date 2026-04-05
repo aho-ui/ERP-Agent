@@ -1,4 +1,5 @@
 nanobot-ai
+uvicorn
 django
 django-cors-headers
 python-dotenv

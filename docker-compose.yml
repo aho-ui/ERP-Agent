@@ -12,12 +12,20 @@ services:
       - ODOO_PASSWORD=admin
     volumes:
       - ${HOME}/.nanobot:/root/.nanobot
+      - nanobot-db:/app/db.sqlite3
+      - ./demo.db:/app/demo.db
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     ports:
       - "3000:3000"
     depends_on:
       - backend
+
+volumes:
+  nanobot-db:
