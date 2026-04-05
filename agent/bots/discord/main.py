@@ -1,14 +1,18 @@
 import asyncio
+import base64
+import io
 
 import discord
 from loguru import logger
 
 from agent.framework.agent import get_agent
+from agent.utils.queue import CollectingQueue
 
 _agent = get_agent("nanobot")
 
 
 async def run(token: str, bot_id: str, role: str):
+    # progress_queue: asyncio.Queue | None = None
     intents = discord.Intents.default()
     intents.message_content = True
     client = discord.Client(intents=intents)
@@ -45,18 +49,73 @@ async def run(token: str, bot_id: str, role: str):
         _agent._source.set("discord")
         _agent._bot_id.set(bot_id)
 
-        async with message.channel.typing():
+        queue = CollectingQueue()
+        thinking_msg = await message.channel.send("_Thinking..._")
+
+        async def on_progress(content, **_):
+            await queue.put({"type": "progress", "content": content})
+            # if progress_queue:
+            #     progress_queue.put_nowait({"type": "progress", "content": content})
             try:
-                response = await agent_loop.process_direct(content=text, session_key=str(session.id))
+                await thinking_msg.edit(content=f"_{content[:200]}_")
+            except Exception:
+                pass
+
+        async def run_agent():
+            try:
+                response = await agent_loop.process_direct(content=text, session_key=str(session.id), on_progress=on_progress)
+                await queue.put({"type": "response", "content": response})
+                # if progress_queue:
+                #     progress_queue.put_nowait({"type": "response", "content": response})
             except Exception as e:
                 logger.error(f"[discord bot] agent error: {e}")
-                response = "An error occurred. Please try again."
+                await queue.put({"type": "response", "content": "An error occurred. Please try again."})
+            finally:
+                await queue.put(None)
+                # if progress_queue:
+                #     progress_queue.put_nowait(None)
+
+        task = asyncio.create_task(run_agent())
+        _agent._task_queues[id(task)] = queue
+        task.add_done_callback(lambda t: _agent._task_queues.pop(id(t), None))
+
+        await task
+
+        try:
+            await thinking_msg.delete()
+        except Exception:
+            pass
+
+        response = ""
+        while not queue.empty():
+            item = queue.get_nowait()
+            if not item:
+                continue
+            if item.get("type") == "progress":
+                await ChatMessage.objects.acreate(
+                    session=session, user=None, role=ChatMessage.Role.ASSISTANT, content=f"[thinking] {item['content']}", artifacts=[],
+                )
+            elif item.get("type") == "response":
+                response = item["content"]
 
         await ChatMessage.objects.acreate(
-            session=session, user=None, role=ChatMessage.Role.ASSISTANT, content=response[:2000], artifacts=[],
+            session=session, user=None, role=ChatMessage.Role.ASSISTANT, content=response[:2000], artifacts=queue.artifacts,
         )
 
         await message.reply(response[:2000])
+        for artifact in queue.artifacts:
+            if artifact.get("type") == "image":
+                try:
+                    img_bytes = base64.b64decode(artifact["content"])
+                    await message.channel.send(file=discord.File(io.BytesIO(img_bytes), filename="table.png"))
+                except Exception as e:
+                    logger.warning(f"[discord bot] failed to send image: {e}")
+            elif artifact.get("type") == "pdf":
+                try:
+                    pdf_bytes = base64.b64decode(artifact["content"])
+                    await message.channel.send(file=discord.File(io.BytesIO(pdf_bytes), filename=f"{artifact.get('title', 'document')}.pdf"))
+                except Exception as e:
+                    logger.warning(f"[discord bot] failed to send pdf: {e}")
 
     try:
         await client.start(token)
