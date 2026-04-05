@@ -2,14 +2,13 @@ services:
   backend:
     image: ghcr.io/aho-ui/erp-agent-backend:latest
     environment:
-      - OPENAI_API_KEY=
-      - ODOO_URL=
-      - ODOO_DB=
-      - ODOO_USER=
-      - ODOO_PASSWORD=
+      OPENAI_API_KEY:
+      ODOO_URL:
+      ODOO_DB:
+      ODOO_USER:
+      ODOO_PASSWORD:
     volumes:
       - nanobot-db:/app/dbdata
-      - ./demo.db:/app/demo.db
     ports:
       - "8000:8000"
     extra_hosts:
