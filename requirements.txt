@@ -1,4 +1,4 @@
-nanobot-ai
+nanobot-ai==0.1.4.post5
 uvicorn
 django
 django-cors-headers
