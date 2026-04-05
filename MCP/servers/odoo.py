@@ -168,6 +168,25 @@ def create_customer_invoice(partner_id: int, product_id: int, quantity: float, p
     return json.dumps({"invoice_id": invoice_id})
 
 
+def dashboard_stats() -> dict | None:
+    try:
+        uid, models = connect()
+        open_sales = len(execute(uid, models, "sale.order", "search", [[["state", "in", ["draft", "sale"]]]], {"limit": 10000}))
+        total_customers = len(execute(uid, models, "res.partner", "search", [[["is_company", "=", True], ["customer_rank", ">", 0]]], {"limit": 10000}))
+        total_products = len(execute(uid, models, "product.product", "search", [[["sale_ok", "=", True]]], {"limit": 10000}))
+        open_purchase = len(execute(uid, models, "purchase.order", "search", [[["state", "in", ["draft", "purchase"]]]], {"limit": 10000}))
+        unpaid_invoices = len(execute(uid, models, "account.move", "search", [[["move_type", "=", "out_invoice"], ["payment_state", "in", ["not_paid", "partial"]]]], {"limit": 10000}))
+        return {
+            "open_sales_orders": open_sales,
+            "total_customers": total_customers,
+            "total_products": total_products,
+            "open_purchase_orders": open_purchase,
+            "unpaid_invoices": unpaid_invoices,
+        }
+    except Exception:
+        return None
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 #   mcp.run(transport="sse", host="0.0.0.0", port=8001)

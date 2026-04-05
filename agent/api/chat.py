@@ -12,8 +12,7 @@ from agent.api.auth import require_auth
 from agent.framework.agent import get_agent
 from agent.models import AgentAction, ChatMessage, ChatSession
 from agent.utils.streaming import stream_queue
-
-_ARTIFACT_TYPES = {"pdf", "image", "artifact"}
+from agent.utils.queue import CollectingQueue
 
 
 async def _save_message(session_id: str, user_id, role, content: str, artifacts: list = None):
@@ -26,19 +25,12 @@ async def _save_message(session_id: str, user_id, role, content: str, artifacts:
             content=content,
             artifacts=artifacts or [],
         )
-    except (ChatSession.DoesNotExist, Exception):
+    # except (ChatSession.DoesNotExist, Exception):
+    #     pass
+    except ChatSession.DoesNotExist:
         pass
-
-
-class _CollectingQueue(asyncio.Queue):
-    def __init__(self):
-        super().__init__()
-        self.artifacts: list = []
-
-    def put_nowait(self, item):
-        if isinstance(item, dict) and item.get("type") in _ARTIFACT_TYPES:
-            self.artifacts.append(item)
-        super().put_nowait(item)
+    except Exception as e:
+        logger.warning(f"[chat] failed to save message: {e}")
 
 PROVIDER = os.environ.get("AGENT_PROVIDER", "nanobot")
 _agent = get_agent(PROVIDER)
@@ -73,7 +65,7 @@ async def chat(request):
     _run_id.set(str(uuid.uuid4()))
     _source.set("web")
     _bot_id.set(None)
-    queue = _CollectingQueue()
+    queue = CollectingQueue()
 
     await _save_message(session_key, user_id, ChatMessage.Role.USER, message)
 

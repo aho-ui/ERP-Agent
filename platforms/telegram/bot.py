@@ -5,12 +5,13 @@ import logging
 import os
 
 import aiohttp
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 # load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
-load_dotenv(find_dotenv())
+# load_dotenv(find_dotenv())
+load_dotenv()
 
 # --- Setup ---
 # 1. Message @BotFather on Telegram → /newbot → copy the token

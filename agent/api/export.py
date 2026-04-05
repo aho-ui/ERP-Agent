@@ -1,6 +1,6 @@
 import json
 
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -13,7 +13,11 @@ async def export(request):
     _, _, err = await require_auth(request)
     if err:
         return err
-    body = json.loads(request.body)
+    # body = json.loads(request.body)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
     fmt = body.get("format", "csv")
     title = body.get("title", "export")
 

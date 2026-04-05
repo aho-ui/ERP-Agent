@@ -198,5 +198,25 @@ def create_customer_invoice(partner_id: int, product_id: int, quantity: float, p
     return json.dumps({"invoice_id": cur.lastrowid})
 
 
+def dashboard_stats() -> dict | None:
+    try:
+        conn = get_conn()
+        sales = conn.execute("SELECT COUNT(*) FROM sales_orders").fetchone()[0]
+        customers = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+        products = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+        purchases = conn.execute("SELECT COUNT(*) FROM purchase_orders").fetchone()[0]
+        invoices = conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
+        conn.close()
+        return {
+            "total_sales_orders": sales,
+            "total_customers": customers,
+            "total_products": products,
+            "total_purchase_orders": purchases,
+            "total_invoices": invoices,
+        }
+    except Exception:
+        return None
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
