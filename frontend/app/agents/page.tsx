@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useApi, BACKEND } from "../lib/api";
 
 type AgentItem = {
   id: string | null;
@@ -17,7 +18,7 @@ type AgentItem = {
   created_at?: string;
 };
 
-const BACKEND = "http://localhost:8000";
+// const BACKEND = "http://localhost:8000";
 
 function toolLabel(t: string) {
   return t.replace("mcp_odoo_", "").replace(/_/g, " ");
@@ -25,16 +26,15 @@ function toolLabel(t: string) {
 
 export default function AgentsPage() {
   const router = useRouter();
+  const { apiFetch, authHeader } = useApi();
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
+    if (localStorage.getItem("user_role") !== "admin") { router.replace("/"); return; }
     setUserRole(localStorage.getItem("user_role") ?? "");
   }, [router]);
 
-  function authHeader() {
-    const token = localStorage.getItem("access_token") ?? "";
-    return { "Authorization": `Bearer ${token}` };
-  }
+  // function authHeader() { ... } — moved to useApi
 
   const [userRole, setUserRole] = useState<string>("");
   const [agents, setAgents] = useState<AgentItem[]>([]);
@@ -56,15 +56,15 @@ export default function AgentsPage() {
 
   async function fetchAgents() {
     try {
-      const res = await fetch(`${BACKEND}/api/agent/templates/`, { headers: authHeader() });
-      setAgents(await res.json());
+      const data = await apiFetch<AgentItem[]>(`${BACKEND}/api/agent/templates/`);
+      if (data) setAgents(data);
     } catch {}
   }
 
   async function fetchTools() {
     try {
-      const res = await fetch(`${BACKEND}/api/agent/templates/tools/`, { headers: authHeader() });
-      setTools(await res.json());
+      const data = await apiFetch<string[]>(`${BACKEND}/api/agent/templates/tools/`);
+      if (data) setTools(data);
     } catch {}
   }
 
@@ -100,15 +100,13 @@ export default function AgentsPage() {
     setSaving(true);
     try {
       if (creating) {
-        await fetch(`${BACKEND}/api/agent/templates/`, {
+        await apiFetch(`${BACKEND}/api/agent/templates/`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({ name: fName, type: fType, instructions: fInstructions, allowed_tools: fTools }),
         });
       } else if (selected?.id) {
-        await fetch(`${BACKEND}/api/agent/templates/${selected.id}/`, {
+        await apiFetch(`${BACKEND}/api/agent/templates/${selected.id}/`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({ name: fName, type: fType, instructions: fInstructions, allowed_tools: fTools }),
         });
       }
@@ -121,9 +119,8 @@ export default function AgentsPage() {
 
   async function toggleActive(agent: AgentItem) {
     setToggling(agent.name);
-    await fetch(`${BACKEND}/api/agent/templates/toggle/`, {
+    await apiFetch(`${BACKEND}/api/agent/templates/toggle/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ name: agent.name, enabled: !agent.is_active }),
     });
     await fetchAgents();
@@ -132,7 +129,7 @@ export default function AgentsPage() {
 
   async function remove(agent: AgentItem) {
     if (!agent.id) return;
-    await fetch(`${BACKEND}/api/agent/templates/${agent.id}/`, { method: "DELETE", headers: authHeader() });
+    await apiFetch(`${BACKEND}/api/agent/templates/${agent.id}/`, { method: "DELETE" });
     await fetchAgents();
     if (selected?.id === agent.id) closeForm();
   }
@@ -140,14 +137,10 @@ export default function AgentsPage() {
   const formOpen = userRole === "admin" && (creating || (selected !== null && !selected.builtin));
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-gray-100">
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 text-xs shrink-0">
-        <Link href="/" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Chat</Link>
-        <span className="text-gray-700">|</span>
-        <Link href="/logs" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Logs</Link>
-        <span className="text-gray-700">|</span>
-        <span className="text-gray-300 font-medium">Agents</span>
-      </div>
+    <div className="flex flex-col h-full bg-gray-950 text-gray-100">
+      {/* <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 text-xs shrink-0">
+        <Link href="/" ...>Chat</Link> | <Link href="/logs" ...>Logs</Link> | Agents
+      </div> */}
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-col w-72 shrink-0 border-r border-gray-800">

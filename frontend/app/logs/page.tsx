@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useApi, BACKEND } from "../lib/api";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
-const BACKEND = "http://localhost:8000";
+// const BACKEND = "http://localhost:8000";
 
 type ArtifactItem =
   | { artifact_type: "table"; columns: string[]; rows: string[][]; title?: string }
@@ -98,14 +99,14 @@ async function downloadExport(type: "csv" | "pdf", artifact: Extract<ArtifactIte
   URL.revokeObjectURL(url);
 }
 
-function SingleLogRow({ log, expanded, setExpanded }: { log: LogRow; expanded: string | null; setExpanded: (id: string | null) => void }) {
+function SingleLogRow({ log, expanded, setExpanded, indent = false }: { log: LogRow; expanded: string | null; setExpanded: (id: string | null) => void; indent?: boolean }) {
   return (
     <React.Fragment>
       <tr
-        className="border-t border-gray-800 hover:bg-gray-900/50 cursor-pointer"
+        className={`border-t border-gray-800 hover:bg-gray-900/50 cursor-pointer${indent ? " bg-gray-900/20" : ""}`}
         onClick={() => setExpanded(expanded === log.id ? null : log.id)}
       >
-        <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap font-mono">{new Date(log.timestamp).toLocaleString()}</td>
+        <td className={`py-3 text-xs text-gray-400 whitespace-nowrap font-mono${indent ? " pl-8 pr-4" : " px-4"}`}>{new Date(log.timestamp).toLocaleString()}</td>
         <td className="px-4 py-3 text-xs text-gray-500 capitalize whitespace-nowrap">{log.source || "web"}</td>
         <td className="px-4 py-3 text-xs text-gray-300 whitespace-nowrap">{log.agent_name || "—"}</td>
         <td className="px-4 py-3 text-xs text-gray-200 max-w-xs truncate">{log.intent}</td>
@@ -115,7 +116,7 @@ function SingleLogRow({ log, expanded, setExpanded }: { log: LogRow; expanded: s
       </tr>
       {expanded === log.id && (
         <tr className="border-t border-gray-800 bg-gray-900/30">
-          <td colSpan={6} className="px-4 py-4 space-y-4">
+          <td colSpan={7} className="px-4 py-4 space-y-4">
             {!!log.output?.tokens && (() => {
               const t = log.output.tokens as { prompt: number; completion: number; total: number };
               return (
@@ -184,30 +185,27 @@ function SingleLogRow({ log, expanded, setExpanded }: { log: LogRow; expanded: s
 
 export default function LogsPage() {
   const router = useRouter();
+  const { apiFetch, authHeader } = useApi();
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [sourceFilter, setSourceFilter] = useState<string>("all");
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) { router.replace("/login"); return; }
-    if (localStorage.getItem("user_role") !== "admin") { router.replace("/"); return; }
-    fetch(`${BACKEND}/api/agent/logs/`, { headers: { "Authorization": `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then(data => Array.isArray(data) ? setLogs(data) : {})
+    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
+    // if (localStorage.getItem("user_role") !== "admin") { router.replace("/"); return; }
+    const role = localStorage.getItem("user_role");
+    if (role !== "operator" && role !== "admin") { router.replace("/"); return; }
+    apiFetch<LogRow[]>(`${BACKEND}/api/agent/logs/`)
+      .then(data => data && Array.isArray(data) ? setLogs(data) : {})
       .catch(() => {});
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      <div className="flex items-center gap-4 px-6 py-3 border-b border-gray-800 text-sm">
-        <Link href="/" className="text-gray-400 hover:text-gray-200 transition-colors">
-          Chat
-        </Link>
-        <span className="text-gray-600">/</span>
-        <span className="text-gray-200">Audit Logs</span>
-      </div>
+    <div className="h-full overflow-y-auto bg-gray-950 text-gray-100">
+      {/* <div className="flex items-center gap-4 px-6 py-3 border-b border-gray-800 text-sm">
+        Chat / Audit Logs
+      </div> */}
 
       <div className="px-6 py-6">
         <div className="flex items-center justify-between mb-3">
@@ -224,8 +222,7 @@ export default function LogsPage() {
           </div>
           <button
             onClick={() => {
-              const token = localStorage.getItem("access_token") ?? "";
-              fetch(`${BACKEND}/api/agent/logs/export/`, { headers: { "Authorization": `Bearer ${token}` } })
+              fetch(`${BACKEND}/api/agent/logs/export/`, { headers: authHeader() })
                 .then(r => r.blob())
                 .then(blob => {
                   const url = URL.createObjectURL(blob);
@@ -260,68 +257,66 @@ export default function LogsPage() {
               groups.push({ run_id: null, rows: [log] });
             }
           }
-          return groups.map((group) => {
-            if (!group.run_id) {
-              const log = group.rows[0];
-              return (
-                <div key={log.id} className="mb-2 rounded-lg border border-gray-800 overflow-hidden">
-                  <table className="w-full text-sm text-left">
-                    <tbody>
-                      <SingleLogRow log={log} expanded={expanded} setExpanded={setExpanded} />
-                    </tbody>
-                  </table>
-                </div>
-              );
-            }
-            const isOpen = expandedGroups.has(group.run_id);
-            const first = group.rows[0];
-            const agents = [...new Set(group.rows.map(r => r.agent_name).filter(Boolean))].join(", ");
-            const overallStatus = group.rows.some(r => r.status === "failed") ? "failed"
-              : group.rows.some(r => r.status === "pending") ? "pending"
-              : group.rows.some(r => r.status === "approved") ? "approved"
-              : "success";
-            return (
-              <div key={group.run_id} className="mb-2 rounded-lg border border-gray-800 overflow-hidden">
-                <div
-                  className="flex items-center gap-3 px-4 py-3 bg-gray-900 cursor-pointer hover:bg-gray-800/80"
-                  onClick={() => setExpandedGroups(prev => {
-                    const next = new Set(prev);
-                    isOpen ? next.delete(group.run_id!) : next.add(group.run_id!);
-                    return next;
-                  })}
-                >
-                  <span className="text-gray-600 font-mono text-xs">{isOpen ? "▾" : "▸"}</span>
-                  <span className="text-xs text-gray-400 font-mono whitespace-nowrap">{new Date(first.timestamp).toLocaleString()}</span>
-                  <span className="text-xs text-gray-200 flex-1 truncate">{first.intent}</span>
-                  <span className="text-xs text-gray-500 shrink-0">{agents}</span>
-                  <span className="text-xs text-gray-600 shrink-0">{group.rows.length} action{group.rows.length !== 1 ? "s" : ""}</span>
-                  <span className={`text-xs font-medium shrink-0 ${STATUS_STYLES[overallStatus] ?? "text-gray-400"}`}>{overallStatus}</span>
-                </div>
-                {isOpen && (
-                  <div className="border-t border-gray-800">
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-gray-800/50 text-gray-500 text-xs uppercase">
-                        <tr>
-                          <th className="px-4 py-2 font-medium">Timestamp</th>
-                          <th className="px-4 py-2 font-medium">Source</th>
-                          <th className="px-4 py-2 font-medium">Agent</th>
-                          <th className="px-4 py-2 font-medium">Intent</th>
-                          <th className="px-4 py-2 font-medium">Tools Used</th>
-                          <th className="px-4 py-2 font-medium">Status</th>
-                          <th className="px-4 py-2 font-medium">Output</th>
+          return (
+            <div className="rounded-lg border border-gray-800 overflow-hidden">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-gray-900 text-gray-500 uppercase sticky top-0">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Timestamp</th>
+                    <th className="px-4 py-2 font-medium">Source</th>
+                    <th className="px-4 py-2 font-medium">Agent</th>
+                    <th className="px-4 py-2 font-medium">Intent</th>
+                    <th className="px-4 py-2 font-medium">Tools Used</th>
+                    <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 font-medium w-6"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((group) => {
+                    if (!group.run_id) {
+                      const log = group.rows[0];
+                      return <SingleLogRow key={log.id} log={log} expanded={expanded} setExpanded={setExpanded} />;
+                    }
+                    const isOpen = expandedGroups.has(group.run_id);
+                    const first = group.rows[0];
+                    const agents = [...new Set(group.rows.map(r => r.agent_name).filter(Boolean))].join(", ");
+                    const overallStatus = group.rows.some(r => r.status === "failed") ? "failed"
+                      : group.rows.some(r => r.status === "pending") ? "pending"
+                      : group.rows.some(r => r.status === "approved") ? "approved"
+                      : "success";
+                    return (
+                      <React.Fragment key={group.run_id}>
+                        <tr
+                          className="border-t border-gray-800 bg-gray-900/60 hover:bg-gray-800/80 cursor-pointer"
+                          onClick={() => setExpandedGroups(prev => {
+                            const next = new Set(prev);
+                            isOpen ? next.delete(group.run_id!) : next.add(group.run_id!);
+                            return next;
+                          })}
+                        >
+                          <td className="px-4 py-3 text-gray-400 font-mono whitespace-nowrap">{new Date(first.timestamp).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-gray-500 capitalize">{first.source || "web"}</td>
+                          <td className="px-4 py-3 text-gray-500">{agents}</td>
+                          <td className="px-4 py-3 text-gray-200 max-w-xs">
+                            <span className="flex items-center gap-2">
+                              <span className="text-gray-600 font-mono">{isOpen ? "▾" : "▸"}</span>
+                              <span className="truncate">{first.intent}</span>
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{group.rows.length} action{group.rows.length !== 1 ? "s" : ""}</td>
+                          <td className={`px-4 py-3 font-medium ${STATUS_STYLES[overallStatus] ?? "text-gray-400"}`}>{overallStatus}</td>
+                          <td></td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {group.rows.map(log => (
-                          <SingleLogRow key={log.id} log={log} expanded={expanded} setExpanded={setExpanded} />
+                        {isOpen && group.rows.map(log => (
+                          <SingleLogRow key={log.id} log={log} expanded={expanded} setExpanded={setExpanded} indent />
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            );
-          });
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
         })()}
       </div>
 

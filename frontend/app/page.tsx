@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useApi, BACKEND } from "./lib/api";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type TableArtifact = { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string };
@@ -18,7 +19,7 @@ type LogEntry = { content: string; timestamp: string };
 type McpServer = { name: string; transport: string; status: "ok" | "error" };
 type PendingAction = { action_id: string; summary: string; details?: Record<string, unknown>; agent_name: string; timestamp: string };
 
-const BACKEND = "http://localhost:8000";
+// const BACKEND = "http://localhost:8000";
 
 function newTab(label = "New Chat"): Tab {
   return { id: crypto.randomUUID(), label, messages: [] };
@@ -87,6 +88,7 @@ function ChartWidget({ artifact }: { artifact: ChartArtifact }) {
 
 export default function Page() {
   const router = useRouter();
+  const { apiFetch, authHeader } = useApi();
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>("");
   const [closedTabs, setClosedTabs] = useState<Tab[]>([]);
@@ -102,15 +104,14 @@ export default function Page() {
   const [userRole, setUserRole] = useState<string>("");
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) { router.replace("/login"); return; }
+    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     setUserRole(localStorage.getItem("user_role") ?? "");
 
-    const headers = { "Authorization": `Bearer ${token}` };
     Promise.all([
-      fetch(`${BACKEND}/api/agent/sessions/`, { headers }).then(r => r.ok ? r.json() : []),
-      fetch(`${BACKEND}/api/agent/sessions/closed/`, { headers }).then(r => r.ok ? r.json() : []),
-    ]).then(([open, closed]: [{ id: string; label: string }[], { id: string; label: string }[]]) => {
+      apiFetch<{ id: string; label: string }[]>(`${BACKEND}/api/agent/sessions/`),
+      apiFetch<{ id: string; label: string }[]>(`${BACKEND}/api/agent/sessions/closed/`),
+    ]).then(([open, closed]) => {
+      if (!open || !closed) return;
       const openTabs = open.map(s => ({ id: s.id, label: s.label, messages: [] as Message[] }));
       const closedTabList = closed.map(s => ({ id: s.id, label: s.label, messages: [] as Message[] }));
       if (openTabs.length > 0) {
@@ -118,9 +119,8 @@ export default function Page() {
         setActiveTabId(openTabs[0].id);
       } else {
         const t = newTab();
-        fetch(`${BACKEND}/api/agent/sessions/create/`, {
+        apiFetch(`${BACKEND}/api/agent/sessions/create/`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...headers },
           body: JSON.stringify({ id: t.id, label: t.label }),
         }).catch(() => {});
         setTabs([t]);
@@ -130,10 +130,7 @@ export default function Page() {
     }).catch(() => {});
   }, [router]);
 
-  function authHeader() {
-    const token = localStorage.getItem("access_token") ?? "";
-    return { "Authorization": `Bearer ${token}` };
-  }
+  // function authHeader() { ... } — moved to useApi
 
   async function downloadExport(type: "csv" | "pdf" | "xlsx", artifact: { columns?: string[]; rows?: unknown[][]; title?: string }) {
     const body = { format: type, columns: artifact.columns, rows: artifact.rows, title: artifact.title ?? "" };
@@ -151,12 +148,12 @@ export default function Page() {
     URL.revokeObjectURL(url);
   }
 
-  function logout() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user_role");
-    localStorage.removeItem("username");
-    router.replace("/login");
-  }
+  // function logout() {
+  //   localStorage.removeItem("access_token");
+  //   localStorage.removeItem("user_role");
+  //   localStorage.removeItem("username");
+  //   router.replace("/login");
+  // }
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
   const messages = useMemo(() => activeTab?.messages ?? [], [activeTab]);
@@ -167,9 +164,8 @@ export default function Page() {
 
   function addTab() {
     const t = newTab();
-    fetch(`${BACKEND}/api/agent/sessions/create/`, {
+    apiFetch(`${BACKEND}/api/agent/sessions/create/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ id: t.id, label: t.label }),
     }).catch(() => {});
     setTabs(prev => [...prev, t]);
@@ -180,9 +176,8 @@ export default function Page() {
   function closeTab(id: string) {
     const closing = tabs.find(t => t.id === id);
     if (closing) {
-      fetch(`${BACKEND}/api/agent/sessions/${id}/`, {
+      apiFetch(`${BACKEND}/api/agent/sessions/${id}/`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({ is_closed: true }),
       }).catch(() => {});
       setClosedTabs(c => [closing, ...c].slice(0, 20));
@@ -191,9 +186,8 @@ export default function Page() {
       const next = prev.filter(t => t.id !== id);
       if (next.length === 0) {
         const t = newTab();
-        fetch(`${BACKEND}/api/agent/sessions/create/`, {
+        apiFetch(`${BACKEND}/api/agent/sessions/create/`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({ id: t.id, label: t.label }),
         }).catch(() => {});
         setActiveTabId(t.id);
@@ -208,9 +202,8 @@ export default function Page() {
   }
 
   function restoreTab(tab: Tab) {
-    fetch(`${BACKEND}/api/agent/sessions/${tab.id}/`, {
+    apiFetch(`${BACKEND}/api/agent/sessions/${tab.id}/`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ is_closed: false }),
     }).catch(() => {});
     setClosedTabs(prev => prev.filter(t => t.id !== tab.id));
@@ -221,9 +214,8 @@ export default function Page() {
   }
 
   function deleteClosedTab(id: string) {
-    fetch(`${BACKEND}/api/agent/sessions/${id}/`, {
+    apiFetch(`${BACKEND}/api/agent/sessions/${id}/`, {
       method: "DELETE",
-      headers: authHeader(),
     }).catch(() => {});
     setClosedTabs(prev => prev.filter(t => t.id !== id));
   }
@@ -235,10 +227,9 @@ export default function Page() {
 
   useEffect(() => {
     if (!activeTabId) return;
-    fetch(`${BACKEND}/api/agent/sessions/${activeTabId}/messages/`, { headers: authHeader() })
-      .then(r => r.ok ? r.json() : [])
-      .then((rows: { role: string; content: string; artifacts: Artifact[] }[]) => {
-        if (rows.length === 0) return;
+    apiFetch<{ role: string; content: string; artifacts: Artifact[] }[]>(`${BACKEND}/api/agent/sessions/${activeTabId}/messages/`)
+      .then(rows => {
+        if (!rows || rows.length === 0) return;
         setTabs(prev => prev.map(t =>
           t.id === activeTabId
             ? { ...t, messages: rows.map(r => ({ role: r.role as "user" | "assistant", content: r.content, artifacts: r.artifacts })) }
@@ -257,9 +248,8 @@ export default function Page() {
   useEffect(() => {
     async function fetchHealth() {
       try {
-        const res = await fetch(`${BACKEND}/api/agent/mcp/health/`, { headers: authHeader() });
-        const data = await res.json();
-        setMcpServers(data);
+        const data = await apiFetch<McpServer[]>(`${BACKEND}/api/agent/mcp/health/`);
+        if (data) setMcpServers(data);
       } catch {}
     }
     fetchHealth();
@@ -270,9 +260,8 @@ export default function Page() {
   useEffect(() => {
     async function fetchPending() {
       try {
-        const res = await fetch(`${BACKEND}/api/agent/pending/`, { headers: authHeader() });
-        const data: PendingAction[] = await res.json();
-        setPendingActions(data);
+        const data = await apiFetch<PendingAction[]>(`${BACKEND}/api/agent/pending/`);
+        if (data) setPendingActions(data);
       } catch {}
     }
     fetchPending();
@@ -352,9 +341,8 @@ export default function Page() {
     if (isFirst) {
       const label = userMessage.slice(0, 22);
       setTabs(prev => prev.map(t => t.id === tabId ? { ...t, label } : t));
-      fetch(`${BACKEND}/api/agent/sessions/${tabId}/`, {
+      apiFetch(`${BACKEND}/api/agent/sessions/${tabId}/`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({ label }),
       }).catch(() => {});
     }
@@ -400,20 +388,8 @@ export default function Page() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-gray-100">
+    <div className="flex flex-col h-full bg-gray-950 text-gray-100">
       <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 text-xs shrink-0">
-        <Link href="/agents" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Agents</Link>
-        <span className="text-gray-700">|</span>
-        <Link href="/bots" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Bots</Link>
-        {userRole === "admin" && (
-          <>
-            <span className="text-gray-700">|</span>
-            <Link href="/logs" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Logs</Link>
-            <span className="text-gray-700">|</span>
-            <Link href="/users" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Users</Link>
-          </>
-        )}
-        <span className="text-gray-700">|</span>
         <span className="text-gray-500 font-medium">MCP Servers</span>
         {mcpServers.map((s) => (
           <span key={s.name} className="flex items-center gap-1.5 bg-gray-800 px-2.5 py-1 rounded-full">
@@ -424,13 +400,6 @@ export default function Page() {
         {userRole && (
           <span className="ml-auto text-xs text-gray-500 bg-gray-800 px-2.5 py-1 rounded-full capitalize">{userRole}</span>
         )}
-        <button
-          className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-          onClick={logout}
-        >
-          Sign out
-        </button>
-        <span className="text-gray-700">|</span>
         <div className="flex items-center gap-2 text-gray-500">
           <span>Refresh</span>
           <select

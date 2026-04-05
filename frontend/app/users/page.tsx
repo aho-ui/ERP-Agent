@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useApi, BACKEND } from "../lib/api";
 
-const BACKEND = "http://localhost:8000";
+// const BACKEND = "http://localhost:8000";
 
 const ROLES = ["viewer", "operator", "admin", "bot"];
 
@@ -30,6 +31,7 @@ const emptyForm: FormState = { username: "", email: "", password: "", role: "vie
 
 export default function UsersPage() {
   const router = useRouter();
+  const { apiFetch } = useApi();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -37,18 +39,12 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
 
-  function token() {
-    return localStorage.getItem("access_token") ?? "";
-  }
-
-  function authHeaders() {
-    return { "Content-Type": "application/json", Authorization: `Bearer ${token()}` };
-  }
+  // function token() { ... } — moved to useApi
+  // function authHeaders() { ... } — moved to useApi
 
   async function fetchUsers() {
-    const res = await fetch(`${BACKEND}/api/users/`, { headers: authHeaders() });
-    if (res.status === 401 || res.status === 403) { router.replace("/"); return; }
-    setUsers(await res.json());
+    const data = await apiFetch<UserRow[]>(`${BACKEND}/api/users/`);
+    if (data) setUsers(data);
   }
 
   useEffect(() => {
@@ -66,18 +62,13 @@ export default function UsersPage() {
     const payload: Record<string, unknown> = { username: form.username, email: form.email, role: form.role };
     if (form.role !== "bot") payload.password = form.password;
     if (form.role === "bot" && form.expires_days) payload.expires_days = parseInt(form.expires_days);
-    const res = await fetch(`${BACKEND}/api/users/`, {
+    const data = await apiFetch<{ api_key?: string; error?: string }>(`${BACKEND}/api/users/`, {
       method: "POST",
-      headers: authHeaders(),
       body: JSON.stringify(payload),
     });
     setSaving(false);
-    if (!res.ok) {
-      const data = await res.json();
-      setFormError(data.error ?? "Failed to create user.");
-      return;
-    }
-    const data = await res.json();
+    if (!data) { setFormError("Failed to create user."); return; }
+    if (data.error) { setFormError(data.error); return; }
     if (data.api_key) setNewApiKey(data.api_key);
     setForm(emptyForm);
     setFormOpen(false);
@@ -85,36 +76,33 @@ export default function UsersPage() {
   }
 
   async function updateUser(id: string, patch: Partial<UserRow>) {
-    const res = await fetch(`${BACKEND}/api/users/${id}/`, {
+    const data = await apiFetch<{ api_key?: string }>(`${BACKEND}/api/users/${id}/`, {
       method: "PUT",
-      headers: authHeaders(),
       body: JSON.stringify(patch),
     });
-    const data = await res.json();
-    if (data.api_key) setNewApiKey(data.api_key);
+    if (data?.api_key) setNewApiKey(data.api_key);
     fetchUsers();
   }
 
   async function regenerateKey(id: string) {
-    const res = await fetch(`${BACKEND}/api/users/${id}/`, {
+    const data = await apiFetch<{ api_key?: string }>(`${BACKEND}/api/users/${id}/`, {
       method: "PUT",
-      headers: authHeaders(),
       body: JSON.stringify({ regenerate_key: true }),
     });
-    const data = await res.json();
-    if (data.api_key) setNewApiKey(data.api_key);
+    if (data?.api_key) setNewApiKey(data.api_key);
   }
 
   async function deleteUser(id: string) {
-    await fetch(`${BACKEND}/api/users/${id}/`, { method: "DELETE", headers: authHeaders() });
+    await apiFetch(`${BACKEND}/api/users/${id}/`, { method: "DELETE" });
     fetchUsers();
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="h-full overflow-y-auto bg-gray-950 text-gray-100">
+      {/* <div className="flex items-center gap-4 px-6 py-3 border-b border-gray-800 text-sm">
+        Chat / Users
+      </div> */}
       <div className="flex items-center gap-4 px-6 py-3 border-b border-gray-800 text-sm">
-        <Link href="/" className="text-gray-400 hover:text-gray-200 transition-colors">Chat</Link>
-        <span className="text-gray-600">/</span>
         <span className="text-gray-200">Users</span>
         <div className="ml-auto">
           <button

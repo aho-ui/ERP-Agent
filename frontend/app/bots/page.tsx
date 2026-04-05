@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useApi, BACKEND } from "../lib/api";
 
 type Bot = { id: string; name: string; platform: string; role: string; is_active: boolean; running: boolean };
 
-const BACKEND = "http://localhost:8000";
+// const BACKEND = "http://localhost:8000";
 
 const PLATFORMS = [
   { value: "discord", label: "Discord" },
@@ -20,6 +21,7 @@ const ROLES = [
 
 export default function BotsPage() {
   const router = useRouter();
+  const { apiFetch } = useApi();
   const [bots, setBots] = useState<Bot[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
@@ -30,29 +32,29 @@ export default function BotsPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [changingRole, setChangingRole] = useState<string | null>(null);
 
-  function authHeader() {
-    return { "Authorization": `Bearer ${localStorage.getItem("access_token") ?? ""}` };
-  }
+  // function authHeader() { ... } — moved to useApi
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
-    fetch(`${BACKEND}/api/agent/bots/`, { headers: authHeader() })
-      .then(r => r.ok ? r.json() : [])
-      .then(setBots)
-      .catch(() => {});
+    if (localStorage.getItem("user_role") !== "admin") { router.replace("/"); return; }
+    fetchBots();
   }, [router]);
+
+  function fetchBots() {
+    apiFetch<Bot[]>(`${BACKEND}/api/agent/bots/`)
+      .then(data => data && setBots(data))
+      .catch(() => {});
+  }
 
   async function createBot() {
     if (!name.trim() || !token.trim()) return;
     setSaving(true);
-    const res = await fetch(`${BACKEND}/api/agent/bots/create/`, {
+    const res = await apiFetch<Bot>(`${BACKEND}/api/agent/bots/create/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ name: name.trim(), platform, role, token: token.trim() }),
     });
-    if (res.ok) {
-      const bot = await res.json() as Bot;
-      setBots(prev => [...prev, bot]);
+    if (res) {
+      setBots(prev => [...prev, res]);
       setName("");
       setPlatform("discord");
       setRole("viewer");
@@ -64,13 +66,11 @@ export default function BotsPage() {
 
   async function toggle(bot: Bot) {
     setToggling(bot.id);
-    const res = await fetch(`${BACKEND}/api/agent/bots/${bot.id}/`, {
+    const data = await apiFetch<{ running: boolean }>(`${BACKEND}/api/agent/bots/${bot.id}/`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ is_active: !bot.is_active }),
     });
-    if (res.ok) {
-      const data = await res.json() as { running: boolean };
+    if (data) {
       setBots(prev => prev.map(b => b.id === bot.id ? { ...b, is_active: !bot.is_active, running: data.running } : b));
     }
     setToggling(null);
@@ -78,31 +78,26 @@ export default function BotsPage() {
 
   async function changeRole(bot: Bot, newRole: string) {
     setChangingRole(bot.id);
-    const res = await fetch(`${BACKEND}/api/agent/bots/${bot.id}/`, {
+    const data = await apiFetch(`${BACKEND}/api/agent/bots/${bot.id}/`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ role: newRole }),
     });
-    if (res.ok) {
+    if (data) {
       setBots(prev => prev.map(b => b.id === bot.id ? { ...b, role: newRole } : b));
     }
     setChangingRole(null);
   }
 
   async function deleteBot(id: string) {
-    await fetch(`${BACKEND}/api/agent/bots/${id}/`, { method: "DELETE", headers: authHeader() });
+    await apiFetch(`${BACKEND}/api/agent/bots/${id}/`, { method: "DELETE" });
     setBots(prev => prev.filter(b => b.id !== id));
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 text-xs">
-        <Link href="/" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Chat</Link>
-        <span className="text-gray-700">|</span>
-        <Link href="/agents" className="text-gray-400 hover:text-gray-200 transition-colors font-medium">Agents</Link>
-        <span className="text-gray-700">|</span>
-        <span className="text-gray-300 font-medium">Bots</span>
-      </div>
+    <div className="h-full overflow-y-auto bg-gray-950 text-gray-100">
+      {/* <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 text-xs">
+        Chat | Agents | Bots
+      </div> */}
 
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
