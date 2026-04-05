@@ -30,6 +30,7 @@ class ChatMessage(models.Model):
     role = models.CharField(max_length=20, choices=Role.choices)
     content = models.TextField()
     artifacts = models.JSONField(default=list)
+    steps = models.JSONField(default=list)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:

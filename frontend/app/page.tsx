@@ -227,12 +227,12 @@ export default function Page() {
 
   useEffect(() => {
     if (!activeTabId) return;
-    apiFetch<{ role: string; content: string; artifacts: Artifact[] }[]>(`${BACKEND}/api/agent/sessions/${activeTabId}/messages/`)
+    apiFetch<{ role: string; content: string; artifacts: Artifact[]; steps: string[] }[]>(`${BACKEND}/api/agent/sessions/${activeTabId}/messages/`)
       .then(rows => {
         if (!rows || rows.length === 0) return;
         setTabs(prev => prev.map(t =>
           t.id === activeTabId
-            ? { ...t, messages: rows.map(r => ({ role: r.role as "user" | "assistant", content: r.content, artifacts: r.artifacts })) }
+            ? { ...t, messages: rows.map(r => ({ role: r.role as "user" | "assistant", content: r.content, artifacts: r.artifacts, steps: r.steps })) }
             : t
         ));
       })

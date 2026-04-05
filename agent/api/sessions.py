@@ -86,7 +86,7 @@ async def session_messages(request, session_id):
     if err:
         return err
     rows = ChatMessage.objects.filter(session_id=session_id).order_by("timestamp").values(
-        "id", "role", "content", "artifacts", "timestamp"
+        "id", "role", "content", "artifacts", "steps", "timestamp"
     )
     results = [
         {
@@ -94,6 +94,7 @@ async def session_messages(request, session_id):
             "role": r["role"],
             "content": r["content"],
             "artifacts": r["artifacts"],
+            "steps": r["steps"],
             "timestamp": r["timestamp"].isoformat(),
         }
         async for r in rows

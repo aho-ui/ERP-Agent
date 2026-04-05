@@ -15,7 +15,7 @@ from agent.utils.streaming import stream_queue
 from agent.utils.queue import CollectingQueue
 
 
-async def _save_message(session_id: str, user_id, role, content: str, artifacts: list = None):
+async def _save_message(session_id: str, user_id, role, content: str, artifacts: list = None, steps: list = None):
     try:
         session = await ChatSession.objects.aget(id=session_id)
         await ChatMessage.objects.acreate(
@@ -24,6 +24,7 @@ async def _save_message(session_id: str, user_id, role, content: str, artifacts:
             role=role,
             content=content,
             artifacts=artifacts or [],
+            steps=steps or [],
         )
     # except (ChatSession.DoesNotExist, Exception):
     #     pass
@@ -80,7 +81,7 @@ async def chat(request):
                 session_key=session_key,
                 on_progress=on_progress,
             )
-            await _save_message(session_key, user_id, ChatMessage.Role.ASSISTANT, response, queue.artifacts)
+            await _save_message(session_key, user_id, ChatMessage.Role.ASSISTANT, response, queue.artifacts, queue.steps)
             await queue.put({"type": "response", "content": response})
         except Exception as e:
             logger.error(f"[agent] error: {e}")
