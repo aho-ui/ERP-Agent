@@ -2,12 +2,14 @@ import asyncio
 import json
 
 from django.http import JsonResponse
+# from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from agent.api.auth import require_auth
 from agent.models import BotInstance, ChatSession, ChatMessage
 
 _running_bots: dict[str, asyncio.Task] = {}
+# _bot_progress_queues: dict[str, asyncio.Queue] = {}
 
 
 def _bot_runner(platform: str):
@@ -25,8 +27,12 @@ async def _start(bot: BotInstance):
     if bot_id in _running_bots:
         return
     run = _bot_runner(bot.platform)
+    # progress_queue = asyncio.Queue()
+    # _bot_progress_queues[bot_id] = progress_queue
+    # task = asyncio.create_task(run(bot.token, bot_id, bot.role, progress_queue))
     task = asyncio.create_task(run(bot.token, bot_id, bot.role))
     _running_bots[bot_id] = task
+    # task.add_done_callback(lambda t: (_running_bots.pop(bot_id, None), _bot_progress_queues.pop(bot_id, None)))
     task.add_done_callback(lambda t: _running_bots.pop(bot_id, None))
 
 
@@ -190,3 +196,27 @@ async def bot_chat(request, bot_id, session_id):
     )
 
     return JsonResponse({"response": response})
+
+
+# async def bot_progress(request, bot_id):
+#     _, _, err = await require_auth(request)
+#     if err:
+#         return err
+#
+#     async def _stream():
+#         while True:
+#             queue = _bot_progress_queues.get(str(bot_id))
+#             if not queue:
+#                 yield "data: [KEEPALIVE]\n\n"
+#                 await asyncio.sleep(2)
+#                 continue
+#             try:
+#                 event = await asyncio.wait_for(queue.get(), timeout=30)
+#                 if event is None:
+#                     yield "data: [DONE]\n\n"
+#                     continue
+#                 yield f"data: {json.dumps(event)}\n\n"
+#             except asyncio.TimeoutError:
+#                 yield "data: [KEEPALIVE]\n\n"
+#
+#     return StreamingHttpResponse(_stream(), content_type="text/event-stream")
