@@ -3,16 +3,15 @@ services:
     build: .
     ports:
       - "8000:8000"
-    env_file:
-      - .env
     environment:
+      - OPENAI_API_KEY=
       - ODOO_URL=http://host.docker.internal:8069
       - ODOO_DB=odoo_dev_18
       - ODOO_USER=admin
       - ODOO_PASSWORD=admin
     volumes:
       - ${HOME}/.nanobot:/root/.nanobot
-      - nanobot-db:/app/db.sqlite3
+      - nanobot-db:/app/dbdata
       - ./demo.db:/app/demo.db
     extra_hosts:
       - "host.docker.internal:host-gateway"
