@@ -2,8 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-
-const BACKEND = "http://localhost:8000";
+import { BACKEND } from "../lib/api";
 
 const DEMO_USERS = [
   { label: "Admin", username: "admin", password: "admin" },
