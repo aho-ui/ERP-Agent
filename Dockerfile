@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "mkdir -p dbdata && python manage.py migrate --no-input && python manage.py create_default_users && uvicorn backend.asgi:application --host 0.0.0.0 --port 8000 --reload"]
+CMD ["sh", "-c", "python manage.py migrate --no-input && python manage.py create_default_users && uvicorn backend.asgi:application --host 0.0.0.0 --port 8000 --reload"]

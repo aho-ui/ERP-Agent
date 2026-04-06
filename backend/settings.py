@@ -7,8 +7,10 @@ logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 logging.getLogger("LiteLLM Router").setLevel(logging.WARNING)
 logging.getLogger("LiteLLM Proxy").setLevel(logging.WARNING)
 
+import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+os.makedirs(BASE_DIR / "dbdata", exist_ok=True)
 
 SECRET_KEY = "django-insecure-4)#m-2czg)i5c&8*)gwg*b+@xm((k1n=wm@q55+_)9_5a@0s=k"
 
