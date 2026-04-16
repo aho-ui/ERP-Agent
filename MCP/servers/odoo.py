@@ -168,6 +168,88 @@ def create_customer_invoice(partner_id: int, product_id: int, quantity: float, p
     return json.dumps({"invoice_id": invoice_id})
 
 
+@mcp.tool()
+def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_unit: float) -> str:
+    uid, models = connect()
+    product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["name"]})[0]
+    bill_id = execute(uid, models, "account.move", "create", [{
+        "move_type": "in_invoice",
+        "partner_id": vendor_id,
+        "invoice_line_ids": [(0, 0, {
+            "name": product["name"],
+            "quantity": quantity,
+            "price_unit": price_unit,
+        })],
+    }])
+    execute(uid, models, "account.move", "action_post", [[bill_id]])
+    return json.dumps({"bill_id": bill_id})
+
+
+@mcp.tool()
+def confirm_sales_order(order_id: int) -> str:
+    uid, models = connect()
+    execute(uid, models, "sale.order", "button_confirm", [[order_id]])
+    order = execute(uid, models, "sale.order", "read", [[order_id]], {"fields": ["id", "name", "state"]})[0]
+    return json.dumps({"order_id": order_id, "name": order["name"], "state": order["state"]})
+
+
+@mcp.tool()
+def register_payment(invoice_id: int, amount: float) -> str:
+    uid, models = connect()
+    invoice = execute(uid, models, "account.move", "read", [[invoice_id]], {"fields": ["id", "partner_id", "move_type"]})[0]
+    is_outbound = invoice["move_type"] == "in_invoice"
+    payment_id = execute(uid, models, "account.payment", "create", [{
+        "amount": amount,
+        "partner_id": invoice["partner_id"][0],
+        "payment_type": "outbound" if is_outbound else "inbound",
+        "partner_type": "vendor" if is_outbound else "customer",
+    }])
+    execute(uid, models, "account.payment", "action_post", [[payment_id]])
+    return json.dumps({"payment_id": payment_id, "amount": amount})
+
+
+@mcp.tool()
+def update_sales_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
+    uid, models = connect()
+    updates = {}
+    if partner_id is not None:
+        updates["partner_id"] = partner_id
+    if notes is not None:
+        updates["note"] = notes
+    if not updates:
+        return json.dumps({"error": "No fields to update"})
+    execute(uid, models, "sale.order", "write", [[order_id], updates])
+    return json.dumps({"order_id": order_id, "updated_fields": list(updates.keys())})
+
+
+@mcp.tool()
+def update_purchase_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
+    uid, models = connect()
+    updates = {}
+    if partner_id is not None:
+        updates["partner_id"] = partner_id
+    if notes is not None:
+        updates["note"] = notes
+    if not updates:
+        return json.dumps({"error": "No fields to update"})
+    execute(uid, models, "purchase.order", "write", [[order_id], updates])
+    return json.dumps({"order_id": order_id, "updated_fields": list(updates.keys())})
+
+
+@mcp.tool()
+def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -> str:
+    uid, models = connect()
+    updates = {}
+    if partner_id is not None:
+        updates["partner_id"] = partner_id
+    if notes is not None:
+        updates["narration"] = notes
+    if not updates:
+        return json.dumps({"error": "No fields to update"})
+    execute(uid, models, "account.move", "write", [[invoice_id], updates])
+    return json.dumps({"invoice_id": invoice_id, "updated_fields": list(updates.keys())})
+
+
 def dashboard_stats() -> dict | None:
     try:
         uid, models = connect()
