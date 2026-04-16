@@ -225,6 +225,7 @@ class DispatchTool(Tool):
                     tool_called=tools_used,
                     output={"pending_summary": result.summary, "details": result.details, "tokens": tokens},
                 )
+                return result.summary
             else:
                 await AgentAction.objects.filter(id=action.id).aupdate(
                     status=AgentAction.Status.SUCCESS,

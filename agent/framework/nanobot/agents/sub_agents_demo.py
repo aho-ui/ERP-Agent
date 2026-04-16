@@ -18,7 +18,7 @@ _RESPONSE_FORMAT = (
 )
 
 _PO_FORMAT = (
-    "\nOVERRIDE for purchase order creation (takes precedence over single-operation format above): "
+    "\nFor confirmed purchase order creation (only when task contains 'CONFIRMED'): "
     "After calling create_purchase_order, you MUST call get_purchase_orders to fetch the created PO and retrieve its name and date. "
     "Then return this exact structure: "
     "{\"summary\": \"...\", \"po\": {\"po_number\": \"<name from fetched PO>\", \"date\": \"<date_order>\", "
@@ -51,8 +51,12 @@ AGENTS = [
         "allowed_tools": [
             "mcp_sqlite_get_purchase_orders",
             "mcp_sqlite_create_purchase_order",
+            "mcp_sqlite_update_purchase_order",
             "mcp_sqlite_get_vendors",
             "mcp_sqlite_get_products",
+            "mcp_sqlite_create_vendor_bill",
+            "mcp_sqlite_register_payment",
+            "mcp_extraction_extract_purchase_order",
         ],
     },
     {
@@ -68,8 +72,11 @@ AGENTS = [
         "allowed_tools": [
             "mcp_sqlite_get_sales_orders",
             "mcp_sqlite_create_sales_order",
+            "mcp_sqlite_confirm_sales_order",
+            "mcp_sqlite_update_sales_order",
             "mcp_sqlite_get_customers",
             "mcp_sqlite_get_products",
+            "mcp_extraction_extract_sales_order",
         ],
     },
     {
@@ -86,7 +93,11 @@ AGENTS = [
             "mcp_sqlite_get_invoices",
             "mcp_sqlite_get_vendor_bills",
             "mcp_sqlite_create_customer_invoice",
+            "mcp_sqlite_create_vendor_bill",
+            "mcp_sqlite_update_invoice",
+            "mcp_sqlite_register_payment",
             "mcp_sqlite_get_customers",
+            "mcp_extraction_extract_invoice",
         ],
     },
     {

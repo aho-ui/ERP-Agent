@@ -37,8 +37,12 @@ AGENTS = [
         "allowed_tools": [
             "mcp_odoo_get_purchase_orders",
             "mcp_odoo_create_purchase_order",
+            "mcp_odoo_update_purchase_order",
             "mcp_odoo_get_vendors",
             "mcp_odoo_get_products",
+            "mcp_odoo_create_vendor_bill",
+            "mcp_odoo_register_payment",
+            "mcp_extraction_extract_purchase_order",
         ],
     },
     {
@@ -54,8 +58,11 @@ AGENTS = [
         "allowed_tools": [
             "mcp_odoo_get_sales_orders",
             "mcp_odoo_create_sales_order",
+            "mcp_odoo_confirm_sales_order",
+            "mcp_odoo_update_sales_order",
             "mcp_odoo_get_customers",
             "mcp_odoo_get_products",
+            "mcp_extraction_extract_sales_order",
         ],
     },
     {
@@ -72,7 +79,11 @@ AGENTS = [
             "mcp_odoo_get_invoices",
             "mcp_odoo_get_vendor_bills",
             "mcp_odoo_create_customer_invoice",
+            "mcp_odoo_create_vendor_bill",
+            "mcp_odoo_update_invoice",
+            "mcp_odoo_register_payment",
             "mcp_odoo_get_customers",
+            "mcp_extraction_extract_invoice",
         ],
     },
     {
