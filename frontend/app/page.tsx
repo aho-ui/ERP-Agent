@@ -95,6 +95,7 @@ export default function Page() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [input, setInput] = useState("");
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [pendingSteps, setPendingSteps] = useState<string[]>([]);
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
@@ -241,6 +242,7 @@ export default function Page() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, pendingSteps]);
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs]);
@@ -328,18 +330,39 @@ export default function Page() {
   }
 
   async function send() {
-    if (!input.trim() || loading) return;
+    if ((!input.trim() && !attachedFile) || loading) return;
 
     const tabId = activeTabId;
-    const userMessage = input.trim();
+    const typedText = input.trim();
+    let userMessage = typedText;
+    const file = attachedFile;
     setInput("");
+    setAttachedFile(null);
     setLoading(true);
     setLogs([]);
     setPendingSteps([]);
 
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const token = localStorage.getItem("access_token");
+      const uploadRes = await fetch(`${BACKEND}/api/agent/upload/`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (uploadRes.ok) {
+        const uploadData = await uploadRes.json();
+        const task = userMessage
+          ? userMessage
+          : `Acknowledge receipt with "Received: [brief title/description]" on one line, then "Awaiting your instructions." on the next. Keep it brief. Do not display the file content.`;
+        userMessage = `[File: ${file.name}]\n${uploadData.content}\n\n${task}`;
+      }
+    }
+
     const isFirst = (tabs.find(t => t.id === tabId)?.messages ?? []).length === 0;
     if (isFirst) {
-      const label = userMessage.slice(0, 22);
+      const label = file ? file.name.slice(0, 22) : userMessage.slice(0, 22);
       setTabs(prev => prev.map(t => t.id === tabId ? { ...t, label } : t));
       apiFetch(`${BACKEND}/api/agent/sessions/${tabId}/`, {
         method: "PATCH",
@@ -347,7 +370,10 @@ export default function Page() {
       }).catch(() => {});
     }
 
-    updateMessages(tabId, prev => [...prev, { role: "user", content: userMessage }]);
+    const displayContent = file
+      ? `[File: ${file.name}]` + (typedText ? `\n\n${typedText}` : "")
+      : userMessage;
+    updateMessages(tabId, prev => [...prev, { role: "user", content: displayContent }]);
 
     const res = await fetch(`${BACKEND}/api/agent/chat/`, {
       method: "POST",
@@ -481,9 +507,23 @@ export default function Page() {
                 </div>
               )}
               <div className={`max-w-[75%] rounded-lg px-4 py-2 text-sm ${
-                m.role === "user" ? "bg-blue-600 text-white whitespace-pre-wrap" : "bg-gray-800 text-gray-100"
+                m.role === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"
               }`}>
-                {m.role === "user" ? m.content : renderMarkdown(m.content)}
+                {m.role === "user" ? (() => {
+                  if (m.content.startsWith("[File: ")) {
+                    const filename = m.content.slice(7, m.content.indexOf("]"));
+                    const rest = m.content.indexOf("\n\n") >= 0 ? m.content.slice(m.content.indexOf("\n\n") + 2) : "";
+                    return (
+                      <div className="flex flex-col gap-1.5">
+                        <span className="inline-flex items-center gap-1.5 bg-blue-500/50 rounded px-2 py-1 text-xs font-mono">
+                          ⊕ {filename}
+                        </span>
+                        {rest && <span className="whitespace-pre-wrap">{rest}</span>}
+                      </div>
+                    );
+                  }
+                  return <span className="whitespace-pre-wrap">{m.content}</span>;
+                })() : renderMarkdown(m.content)}
               </div>
               {m.artifacts && m.artifacts.map((artifact, ai) => (
                 <div key={ai} className="max-w-[90%] mt-2 rounded-lg border border-gray-700">
@@ -635,22 +675,47 @@ export default function Page() {
           <div ref={chatEndRef} />
         </div>
 
-        <div className="px-4 py-3 border-t border-gray-800 flex gap-2">
-          <input
-            className="flex-1 bg-gray-800 rounded-lg px-4 py-2 text-sm outline-none placeholder-gray-500 focus:ring-1 focus:ring-blue-600"
-            placeholder="Type a message..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-            disabled={loading}
-          />
-          <button
-            className="px-4 py-2 bg-blue-600 rounded-lg text-sm font-medium disabled:opacity-40 hover:bg-blue-500 transition-colors"
-            onClick={send}
-            disabled={loading}
-          >
-            Send
-          </button>
+        <div className="px-4 py-3 border-t border-gray-800 flex flex-col gap-2">
+          {attachedFile && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded-lg flex items-center gap-1.5 max-w-xs truncate">
+                <span className="truncate">{attachedFile.name}</span>
+                <button onClick={() => setAttachedFile(null)} className="text-gray-500 hover:text-gray-300 shrink-0">×</button>
+              </span>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*,.pdf,.docx,.xlsx,.csv"
+              onChange={(e) => setAttachedFile(e.target.files?.[0] ?? null)}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading}
+              className="px-3 py-2 text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40 text-base leading-none"
+              title="Attach file"
+            >
+              ⊕
+            </button>
+            <input
+              className="flex-1 bg-gray-800 rounded-lg px-4 py-2 text-sm outline-none placeholder-gray-500 focus:ring-1 focus:ring-blue-600"
+              placeholder="Type a message..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+              disabled={loading}
+            />
+            <button
+              className="px-4 py-2 bg-blue-600 rounded-lg text-sm font-medium disabled:opacity-40 hover:bg-blue-500 transition-colors"
+              onClick={send}
+              disabled={loading || (!input.trim() && !attachedFile)}
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
 
