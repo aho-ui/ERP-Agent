@@ -10,6 +10,11 @@ botbuilder-core
 botbuilder-integration-aiohttp
 python-telegram-bot
 discord.py
+twilio
+pyngrok
+slack_bolt
 openpyxl
+pypdf
+python-docx
 matplotlib
 pillow

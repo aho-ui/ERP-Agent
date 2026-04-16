@@ -85,3 +85,53 @@ The system routes your message to the appropriate sub-agent based on intent.
 | `analytics_agent` | Cross-functional reporting and data analysis with chart support |
 
 Write operations (create, update) require confirmation before execution.
+
+---
+
+## Platform Bots
+
+The agent can be deployed as a bot on external platforms. Bots are managed from the Bots page in the UI.
+
+### Discord
+
+Create a bot at [discord.com/developers](https://discord.com/developers/applications).
+
+Required bot permissions:
+- `Send Messages`
+- `Read Message History`
+- `Attach Files`
+
+Enable **Message Content Intent** under Bot → Privileged Gateway Intents.
+
+Token: the bot token from the Bot page.
+
+### Slack
+
+Create an app at [api.slack.com/apps](https://api.slack.com/apps). Enable **Socket Mode**.
+
+Required bot token scopes (OAuth & Permissions):
+- `chat:write`
+- `files:write`
+- `channels:history`
+- `im:history`
+
+Required app-level token scope (Basic Information → App-Level Tokens):
+- `connections:write`
+
+Subscribe to bot events (Event Subscriptions): `message.channels`, `message.im`
+
+Tokens: Bot Token (`xoxb-...`) and App Token (`xapp-...`).
+
+### Telegram
+
+Create a bot via [@BotFather](https://t.me/BotFather) on Telegram. No extra permissions needed.
+
+Token: the token provided by BotFather.
+
+### WhatsApp
+
+WhatsApp is supported via [Twilio](https://www.twilio.com). Set up a Twilio account and enable the WhatsApp sandbox.
+
+When the bot is activated, a webhook URL is generated and displayed in the UI. Paste it into the Twilio sandbox webhook configuration. Requires `NGROK_AUTHTOKEN` in `.env`.
+
+Credentials required: Account SID, Auth Token, and the Twilio WhatsApp sender number.
