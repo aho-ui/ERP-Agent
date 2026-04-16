@@ -1,16 +1,13 @@
 import random
 import sqlite3
+import sys
+from pathlib import Path
 
-DATES = [
-    "2025-10-02", "2025-10-09", "2025-10-16", "2025-10-23",
-    "2025-11-06", "2025-11-13", "2025-11-20",
-    "2025-12-04", "2025-12-11", "2025-12-18",
-    "2026-01-08", "2026-01-15", "2026-01-22",
-    "2026-02-05", "2026-02-12", "2026-02-19",
-    "2026-03-05", "2026-03-12",
-]
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from utils.data import PURCHASE_DATES, PURCHASE_STATES
 
-STATES = ["purchase", "purchase", "purchase", "done", "done", "draft"]
+# DATES = [...]
+# STATES = [...]
 
 
 def generate_purchase(conn: sqlite3.Connection, vendor_ids: list, product_ids: list):
@@ -18,8 +15,8 @@ def generate_purchase(conn: sqlite3.Connection, vendor_ids: list, product_ids: l
     for _ in range(15):
         vendor_id = random.choice(vendor_ids)
         vendor_name = conn.execute("SELECT name FROM vendors WHERE id=?", [vendor_id]).fetchone()[0]
-        date = random.choice(DATES)
-        state = random.choice(STATES)
+        date = random.choice(PURCHASE_DATES)
+        state = random.choice(PURCHASE_STATES)
 
         line_count = random.randint(1, 3)
         amount = 0.0

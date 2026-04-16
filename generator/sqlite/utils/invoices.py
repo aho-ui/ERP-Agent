@@ -1,7 +1,12 @@
 import random
 import sqlite3
+import sys
+from pathlib import Path
 
-PAYMENT_STATES = ["paid", "paid", "not_paid", "not_paid", "partial"]
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from utils.data import PAYMENT_STATES
+
+# PAYMENT_STATES = ["paid", "paid", "not_paid", "not_paid", "partial"]
 
 
 def generate_invoices(conn: sqlite3.Connection, customer_ids: list, product_ids: list):

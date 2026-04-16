@@ -1,23 +1,20 @@
 import random
+import sys
+from pathlib import Path
 from datetime import date, timedelta
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from utils.data import DEPARTMENTS, EMPLOYEES
+
+# DEPARTMENTS = ["Sales", "Finance", "Procurement", "Operations", "Supply Chain"]
+# EMPLOYEES = [
+#     {"name": "Alice Chen", "job_title": "Sales Manager", "department": "Sales"},
+#     ...
+# ]
 
 
 def execute(uid, models, cfg, model, method, args, kwargs=None):
     return models.execute_kw(cfg["db"], uid, cfg["password"], model, method, args, kwargs or {})
-
-
-DEPARTMENTS = ["Sales", "Finance", "Procurement", "Operations", "Supply Chain"]
-
-EMPLOYEES = [
-    {"name": "Alice Chen", "job_title": "Sales Manager", "department": "Sales"},
-    {"name": "Bob Martinez", "job_title": "Financial Analyst", "department": "Finance"},
-    {"name": "Carol Smith", "job_title": "Procurement Officer", "department": "Procurement"},
-    {"name": "David Lee", "job_title": "Operations Lead", "department": "Operations"},
-    {"name": "Eva Johnson", "job_title": "Supply Chain Manager", "department": "Supply Chain"},
-    {"name": "Frank Wilson", "job_title": "Sales Representative", "department": "Sales"},
-    {"name": "Grace Kim", "job_title": "Finance Manager", "department": "Finance"},
-    {"name": "Henry Brown", "job_title": "Warehouse Coordinator", "department": "Operations"},
-]
 
 
 def generate_hr(uid, models, cfg):

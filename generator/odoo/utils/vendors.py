@@ -1,12 +1,14 @@
 import random
+import sys
+from pathlib import Path
 
-VENDORS = [
-    {"name": "TechSupply Co", "email": "orders@techsupply.com", "is_company": True, "supplier_rank": 1},
-    {"name": "Office Depot Pro", "email": "b2b@officedepotpro.com", "is_company": True, "supplier_rank": 1},
-    {"name": "GlobalParts Ltd", "email": "sales@globalparts.com", "is_company": True, "supplier_rank": 1},
-    {"name": "FastShip Supplies", "email": "contact@fastship.com", "is_company": True, "supplier_rank": 1},
-    {"name": "PrimeTech Wholesale", "email": "wholesale@primetech.com", "is_company": True, "supplier_rank": 1},
-]
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from utils.data import VENDORS
+
+# VENDORS = [
+#     {"name": "TechSupply Co", "email": "orders@techsupply.com", "is_company": True, "supplier_rank": 1},
+#     ...
+# ]
 
 
 def execute(uid, models, cfg, model, method, args, kwargs=None):
@@ -16,8 +18,8 @@ def execute(uid, models, cfg, model, method, args, kwargs=None):
 def generate_vendors(uid, models, cfg, product_ids):
     print("Creating vendors...")
     vendor_ids = []
-    for v in VENDORS:
-        vid = execute(uid, models, cfg, "res.partner", "create", [v])
+    for v in [v for v in VENDORS if v["odoo"]]:
+        vid = execute(uid, models, cfg, "res.partner", "create", [{"name": v["name"], "email": v["email"], "is_company": v["is_company"], "supplier_rank": v["supplier_rank"]}])
         vendor_ids.append(vid)
         print(f"  Created vendor: {v['name']} (id={vid})")
 

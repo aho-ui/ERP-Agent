@@ -1,76 +1,50 @@
 import random
 import sqlite3
+import sys
+from pathlib import Path
 
-CUSTOMERS = [
-    ("Acme Corp", "contact@acme.com", "+1-555-0101"),
-    ("Globex Industries", "info@globex.com", "+1-555-0102"),
-    ("Initech Solutions", "hello@initech.com", "+1-555-0103"),
-    ("Umbrella Ltd", "sales@umbrella.com", "+1-555-0104"),
-    ("Stark Enterprises", "info@stark.com", "+1-555-0105"),
-    ("Wayne Industries", "contact@wayne.com", "+1-555-0106"),
-    ("Cyberdyne Systems", "info@cyberdyne.com", "+1-555-0107"),
-    ("Weyland Corp", "hello@weyland.com", "+1-555-0108"),
-    ("Oscorp Technologies", "sales@oscorp.com", "+1-555-0109"),
-    ("Massive Dynamic", "info@massivedynamic.com", "+1-555-0110"),
-]
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from utils.data import CUSTOMERS, PRODUCTS, SALES_DATES, SALES_STATES
 
-PRODUCTS = [
-    ("Office Chair", 299.99, 130.00, "consu", "OFF-CHR"),
-    ("Standing Desk", 599.99, 270.00, "consu", "STD-DSK"),
-    ("Laptop Stand", 49.99, 20.00, "consu", "LPT-STD"),
-    ("Wireless Mouse", 39.99, 15.00, "consu", "WRL-MSE"),
-    ("Mechanical Keyboard", 129.99, 55.00, "consu", "MCH-KBD"),
-    ('Monitor 27"', 449.99, 200.00, "consu", "MON-27"),
-    ("USB Hub", 29.99, 10.00, "consu", "USB-HUB"),
-    ("Webcam HD", 89.99, 38.00, "consu", "WEB-HD"),
-    ("IT Support", 150.00, 0.00, "service", "SVC-IT"),
-    ("Consulting Hour", 200.00, 0.00, "service", "SVC-CNS"),
-    ("Network Switch", 189.99, 80.00, "consu", "NET-SWT"),
-    ("UPS Battery", 249.99, 100.00, "consu", "UPS-BAT"),
-    ("Docking Station", 179.99, 75.00, "consu", "DCK-STN"),
-    ("Headset Pro", 119.99, 48.00, "consu", "HDS-PRO"),
-    ("Smart Projector", 899.99, 400.00, "consu", "PRJ-SMT"),
-]
-
-DATES = [
-    "2025-10-01", "2025-10-08", "2025-10-15", "2025-10-22", "2025-10-29",
-    "2025-11-05", "2025-11-12", "2025-11-19", "2025-11-26",
-    "2025-12-03", "2025-12-10", "2025-12-17",
-    "2026-01-07", "2026-01-14", "2026-01-21", "2026-01-28",
-    "2026-02-04", "2026-02-11", "2026-02-18", "2026-02-25",
-    "2026-03-04", "2026-03-11",
-]
-
-STATES = ["sale", "sale", "sale", "sale", "done", "done", "draft"]
+# CUSTOMERS = [
+#     ("Acme Corp", "contact@acme.com", "+1-555-0101"),
+#     ...
+# ]
+# PRODUCTS = [
+#     ("Office Chair", 299.99, 130.00, "consu", "OFF-CHR"),
+#     ...
+# ]
+# DATES = [...]
+# STATES = [...]
 
 
 def generate_sales(conn: sqlite3.Connection):
     print("Creating customers...")
     customer_ids = []
-    for name, email, phone in CUSTOMERS:
+    for c in [c for c in CUSTOMERS if c["sqlite"]]:
         cur = conn.execute(
             "INSERT INTO customers (name, email, phone) VALUES (?, ?, ?)",
-            [name, email, phone],
+            [c["name"], c["email"], c["phone"]],
         )
         customer_ids.append(cur.lastrowid)
-        print(f"  Customer: {name} (id={cur.lastrowid})")
+        print(f"  Customer: {c['name']} (id={cur.lastrowid})")
 
     print("Creating products...")
     product_ids = []
-    for name, list_price, standard_price, ptype, code in PRODUCTS:
+    for p in [p for p in PRODUCTS if p["sqlite"]]:
         cur = conn.execute(
             "INSERT INTO products (name, list_price, standard_price, type, default_code) VALUES (?, ?, ?, ?, ?)",
-            [name, list_price, standard_price, ptype, code],
+            [p["name"], p["list_price"], p["standard_price"], p["type"], p["default_code"]],
         )
         product_ids.append(cur.lastrowid)
-        print(f"  Product: {name} (id={cur.lastrowid})")
+        print(f"  Product: {p['name']} (id={cur.lastrowid})")
 
     print("Creating sales orders...")
     for i in range(20):
         customer_id = random.choice(customer_ids)
         customer_name = conn.execute("SELECT name FROM customers WHERE id=?", [customer_id]).fetchone()[0]
-        date = random.choice(DATES)
-        state = random.choice(STATES)
+        date = random.choice(SALES_DATES)
+        state = random.choice(SALES_STATES)
 
         line_count = random.randint(1, 3)
         amount = 0.0

@@ -1,25 +1,18 @@
 import random
+import sys
+from pathlib import Path
 
-CUSTOMERS = [
-    {"name": "Acme Corp", "email": "contact@acme.com", "is_company": True, "customer_rank": 1},
-    {"name": "Globex Industries", "email": "info@globex.com", "is_company": True, "customer_rank": 1},
-    {"name": "Initech Solutions", "email": "hello@initech.com", "is_company": True, "customer_rank": 1},
-    {"name": "Umbrella Ltd", "email": "sales@umbrella.com", "is_company": True, "customer_rank": 1},
-    {"name": "Stark Enterprises", "email": "info@stark.com", "is_company": True, "customer_rank": 1},
-]
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from utils.data import CUSTOMERS, PRODUCTS
 
-PRODUCTS = [
-    {"name": "Office Chair", "list_price": 299.99, "type": "consu"},
-    {"name": "Standing Desk", "list_price": 599.99, "type": "consu"},
-    {"name": "Laptop Stand", "list_price": 49.99, "type": "consu"},
-    {"name": "Wireless Mouse", "list_price": 39.99, "type": "consu"},
-    {"name": "Mechanical Keyboard", "list_price": 129.99, "type": "consu"},
-    {"name": "Monitor 27\"", "list_price": 449.99, "type": "consu"},
-    {"name": "USB Hub", "list_price": 29.99, "type": "consu"},
-    {"name": "Webcam HD", "list_price": 89.99, "type": "consu"},
-    {"name": "IT Support", "list_price": 150.00, "type": "service"},
-    {"name": "Consulting Hour", "list_price": 200.00, "type": "service"},
-]
+# CUSTOMERS = [
+#     {"name": "Acme Corp", "email": "contact@acme.com", "is_company": True, "customer_rank": 1},
+#     ...
+# ]
+# PRODUCTS = [
+#     {"name": "Office Chair", "list_price": 299.99, "type": "consu"},
+#     ...
+# ]
 
 
 def execute(uid, models, cfg, model, method, args, kwargs=None):
@@ -29,15 +22,15 @@ def execute(uid, models, cfg, model, method, args, kwargs=None):
 def generate_sales(uid, models, cfg):
     print("Creating customers...")
     customer_ids = []
-    for c in CUSTOMERS:
-        cid = execute(uid, models, cfg, "res.partner", "create", [c])
+    for c in [c for c in CUSTOMERS if c["odoo"]]:
+        cid = execute(uid, models, cfg, "res.partner", "create", [{"name": c["name"], "email": c["email"], "is_company": c["is_company"], "customer_rank": c["customer_rank"]}])
         customer_ids.append(cid)
         print(f"  Created customer: {c['name']} (id={cid})")
 
     print("Creating products...")
     product_ids = []
-    for p in PRODUCTS:
-        pid = execute(uid, models, cfg, "product.product", "create", [p])
+    for p in [p for p in PRODUCTS if p["odoo"]]:
+        pid = execute(uid, models, cfg, "product.product", "create", [{"name": p["name"], "list_price": p["list_price"], "type": p["type"]}])
         product_ids.append(pid)
         print(f"  Created product: {p['name']} (id={pid})")
 
