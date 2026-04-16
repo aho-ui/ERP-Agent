@@ -7,8 +7,11 @@ from agent.api.export import export
 from agent.api.health import mcp_health
 from agent.api.documents import po_document
 from agent.api.bots import list_bots, create_bot, update_bot, list_bot_sessions, bot_chat
+from agent.bots.whatsapp.main import webhook as whatsapp_webhook
+from agent.bots.media import serve as media_serve
 # from agent.api.bots import bot_progress
 from agent.api.dashboard import dashboard, dashboard_calls
+from agent.api.upload import upload
 
 urlpatterns = [
     path("chat/", chat, name="agent-chat"),
@@ -38,7 +41,10 @@ urlpatterns = [
     path("bots/<uuid:bot_id>/", update_bot, name="agent-bots-update"),
     path("bots/<uuid:bot_id>/sessions/", list_bot_sessions, name="agent-bots-sessions"),
     path("bots/<uuid:bot_id>/sessions/<uuid:session_id>/chat/", bot_chat, name="agent-bots-chat"),
+    path("bots/whatsapp/webhook/<uuid:bot_id>/", whatsapp_webhook, name="agent-bots-whatsapp-webhook"),
+    path("bots/media/<str:key>/", media_serve, name="agent-bots-media"),
     # path("bots/<uuid:bot_id>/progress/", bot_progress, name="agent-bots-progress"),
+    path("upload/", upload, name="agent-upload"),
     path("dashboard/", dashboard, name="agent-dashboard"),
     path("dashboard/calls/", dashboard_calls, name="agent-dashboard-calls"),
 ]

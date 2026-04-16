@@ -44,6 +44,8 @@ class BotInstance(models.Model):
     class Platform(models.TextChoices):
         DISCORD = "discord", "Discord"
         TELEGRAM = "telegram", "Telegram"
+        WHATSAPP = "whatsapp", "WhatsApp"
+        SLACK = "slack", "Slack"
 
     class Role(models.TextChoices):
         VIEWER = "viewer", "Viewer"
@@ -80,6 +82,13 @@ class AgentTemplate(models.Model):
         return self.name
 
 
+class BotMedia(models.Model):
+    key = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    data = models.BinaryField()
+    content_type = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class AgentAction(models.Model):
     class Status(models.TextChoices):
         SUCCESS = "success", "Success"
@@ -91,6 +100,8 @@ class AgentAction(models.Model):
         WEB = "web", "Web"
         DISCORD = "discord", "Discord"
         TELEGRAM = "telegram", "Telegram"
+        WHATSAPP = "whatsapp", "WhatsApp"
+        SLACK = "slack", "Slack"
         SYSTEM = "system", "System"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

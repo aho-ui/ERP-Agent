@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from agent.api.auth import require_auth
 from agent.models import BotInstance, ChatSession, ChatMessage
+from agent.bots.tunnel import start_tunnel, stop_tunnel, get_tunnel
 
 _running_bots: dict[str, asyncio.Task] = {}
 # _bot_progress_queues: dict[str, asyncio.Queue] = {}
@@ -17,6 +18,10 @@ def _bot_runner(platform: str):
         from agent.bots.discord.main import run
     elif platform == BotInstance.Platform.TELEGRAM:
         from agent.bots.telegram.main import run
+    elif platform == BotInstance.Platform.WHATSAPP:
+        return None
+    elif platform == BotInstance.Platform.SLACK:
+        from agent.bots.slack.main import run
     else:
         raise ValueError(f"Unknown platform: {platform}")
     return run
@@ -27,6 +32,9 @@ async def _start(bot: BotInstance):
     if bot_id in _running_bots:
         return
     run = _bot_runner(bot.platform)
+    if run is None:
+        start_tunnel(bot_id, f"/api/agent/bots/whatsapp/webhook/{bot_id}/")
+        return
     # progress_queue = asyncio.Queue()
     # _bot_progress_queues[bot_id] = progress_queue
     # task = asyncio.create_task(run(bot.token, bot_id, bot.role, progress_queue))
@@ -40,6 +48,7 @@ async def _stop(bot_id: str):
     task = _running_bots.pop(bot_id, None)
     if task:
         task.cancel()
+    stop_tunnel(bot_id)
 
 
 async def list_bots(request):
@@ -54,7 +63,8 @@ async def list_bots(request):
             "platform": r["platform"],
             "role": r["role"],
             "is_active": r["is_active"],
-            "running": str(r["id"]) in _running_bots,
+            "running": str(r["id"]) in _running_bots or (r["platform"] == BotInstance.Platform.WHATSAPP and r["is_active"]),
+            "webhook_url": get_tunnel(str(r["id"])),
         }
         async for r in rows
     ]
