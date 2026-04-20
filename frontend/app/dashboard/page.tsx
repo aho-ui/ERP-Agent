@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useApi, BACKEND } from "../lib/api";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
@@ -133,16 +134,16 @@ function McpPanel({
 
             <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-5">
               <SectionHeading>Call Status</SectionHeading>
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie
                     data={statusData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
-                    cy="50%"
+                    cy="45%"
                     outerRadius={75}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                     labelLine={false}
                   >
                     {statusData.map((s, i) => (
@@ -160,7 +161,8 @@ function McpPanel({
             <div className="px-5 py-3 bg-gray-900/60 border-b border-gray-800">
               <SectionHeading>Recent Calls</SectionHeading>
             </div>
-            <table className="w-full text-xs text-left">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-xs text-left">
               <thead className="bg-gray-900/40 text-gray-500 uppercase">
                 <tr>
                   <th className="px-4 py-2 font-medium">Timestamp</th>
@@ -188,7 +190,7 @@ function McpPanel({
                         {c.status}
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 font-mono">
-                        {expandedCall === c.id ? "▾" : "▸"}
+                        {expandedCall === c.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </td>
                     </tr>
                     {expandedCall === c.id && (
@@ -215,6 +217,7 @@ function McpPanel({
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}
