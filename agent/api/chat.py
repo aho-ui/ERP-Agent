@@ -1,6 +1,8 @@
 import asyncio
+import base64
 import json
 import os
+import tempfile
 import uuid
 
 from django.http import JsonResponse, StreamingHttpResponse
@@ -11,6 +13,7 @@ from loguru import logger
 from agent.api.auth import require_auth
 from agent.framework.agent import get_agent
 from agent.models import AgentAction, ChatMessage, ChatSession
+from nanobot.bus.queue import InboundMessage
 from agent.utils.streaming import stream_queue
 from agent.utils.queue import CollectingQueue
 
@@ -60,6 +63,7 @@ async def chat(request):
     if not message:
         return JsonResponse({"error": "message is required"}, status=400)
 
+    image_file = body.get("image_file")
     session_key = body.get("session_key", "api:default")
     _user_role.set(role)
     _user_id.set(user_id)
@@ -68,25 +72,46 @@ async def chat(request):
     _bot_id.set(None)
     queue = CollectingQueue()
 
-    await _save_message(session_key, user_id, ChatMessage.Role.USER, message)
+    save_content = f"[Image: {image_file['filename']}]" + (f"\n\n{message}" if message else "") if image_file else message
+    await _save_message(session_key, user_id, ChatMessage.Role.USER, save_content)
 
     async def on_progress(content, **_):
         await queue.put({"type": "progress", "content": content})
 
     async def run_agent():
         agent_loop = get_agent_loop()
+        tmp_path = None
         try:
-            response = await agent_loop.process_direct(
-                content=message,
-                session_key=session_key,
-                on_progress=on_progress,
-            )
+            if image_file:
+                data = base64.b64decode(image_file["image_data"])
+                ext = "." + image_file["content_type"].split("/")[-1]
+                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                    tmp.write(data)
+                    tmp_path = tmp.name
+                await agent_loop._connect_mcp()
+                inbound = InboundMessage(
+                    channel="web",
+                    sender_id=str(user_id),
+                    chat_id=session_key,
+                    content=message,
+                    media=[tmp_path],
+                )
+                out = await agent_loop._process_message(inbound, session_key=session_key, on_progress=on_progress)
+                response = out.content if out else ""
+            else:
+                response = await agent_loop.process_direct(
+                    content=message,
+                    session_key=session_key,
+                    on_progress=on_progress,
+                )
             await _save_message(session_key, user_id, ChatMessage.Role.ASSISTANT, response, queue.artifacts, queue.steps)
             await queue.put({"type": "response", "content": response})
         except Exception as e:
             logger.error(f"[agent] error: {e}")
             await queue.put({"type": "response", "content": f"Error: {e}"})
         finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
             await queue.put(None)
 
     async def _on_confirmation(event):

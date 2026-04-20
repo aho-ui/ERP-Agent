@@ -56,7 +56,6 @@ AGENTS = [
             "mcp_sqlite_get_products",
             "mcp_sqlite_create_vendor_bill",
             "mcp_sqlite_register_payment",
-            "mcp_extraction_extract_purchase_order",
         ],
     },
     {
@@ -76,7 +75,6 @@ AGENTS = [
             "mcp_sqlite_update_sales_order",
             "mcp_sqlite_get_customers",
             "mcp_sqlite_get_products",
-            "mcp_extraction_extract_sales_order",
         ],
     },
     {
@@ -97,7 +95,6 @@ AGENTS = [
             "mcp_sqlite_update_invoice",
             "mcp_sqlite_register_payment",
             "mcp_sqlite_get_customers",
-            "mcp_extraction_extract_invoice",
         ],
     },
     {

@@ -25,6 +25,26 @@ _WRITE_FORMAT = (
 
 AGENTS = [
     {
+        "name": "extraction_agent",
+        "description": "Extracts structured data from uploaded files (invoices, purchase orders, sales orders)",
+        "system_prompt": (
+            "You are a Document Extraction Agent. Your job is to identify the document type from the filename and content, "
+            "then call the correct extraction tool with the provided file_data and file_type.\n"
+            "Rules:\n"
+            "- If the document is an invoice or vendor bill: call extract_invoice\n"
+            "- If the document is a purchase order: call extract_purchase_order\n"
+            "- If the document is a sales order or customer order: call extract_sales_order\n"
+            "- Always pass file_data and file_type exactly as provided in the task.\n"
+            "Return the extracted data as-is in this format: "
+            "{\"summary\": \"<one sentence describing what was extracted>\", \"records\": [<extracted fields as a flat dict>]}"
+        ),
+        "allowed_tools": [
+            "mcp_extraction_extract_invoice",
+            "mcp_extraction_extract_purchase_order",
+            "mcp_extraction_extract_sales_order",
+        ],
+    },
+    {
         "name": "purchase_agent",
         "description": "Handles purchase orders and vendor operations",
         "system_prompt": (
@@ -42,7 +62,6 @@ AGENTS = [
             "mcp_odoo_get_products",
             "mcp_odoo_create_vendor_bill",
             "mcp_odoo_register_payment",
-            "mcp_extraction_extract_purchase_order",
         ],
     },
     {
@@ -62,7 +81,6 @@ AGENTS = [
             "mcp_odoo_update_sales_order",
             "mcp_odoo_get_customers",
             "mcp_odoo_get_products",
-            "mcp_extraction_extract_sales_order",
         ],
     },
     {
@@ -83,7 +101,6 @@ AGENTS = [
             "mcp_odoo_update_invoice",
             "mcp_odoo_register_payment",
             "mcp_odoo_get_customers",
-            "mcp_extraction_extract_invoice",
         ],
     },
     {
