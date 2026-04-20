@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Check, ChevronDown, ChevronRight, Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { useApi, BACKEND } from "./lib/api";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
@@ -48,12 +49,13 @@ function ChartWidget({ artifact }: { artifact: ChartArtifact }) {
   const { chart_type, data, x_key, series } = artifact;
   if (chart_type === "pie") {
     return (
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={280}>
         <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
             {data.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
           </Pie>
           <Tooltip />
+          <Legend verticalAlign="bottom" height={36} />
         </PieChart>
       </ResponsiveContainer>
     );
@@ -96,7 +98,10 @@ export default function Page() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [input, setInput] = useState("");
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const [loading, setLoading] = useState(false);
+  const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const [pendingSteps, setPendingSteps] = useState<string[]>([]);
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
@@ -244,7 +249,7 @@ export default function Page() {
   const logEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, pendingSteps]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, pendingSteps, liveTranscript]);
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs]);
 
   useEffect(() => {
@@ -329,15 +334,43 @@ export default function Page() {
     }
   }
 
-  async function send() {
-    if ((!input.trim() && !attachedFile) || loading) return;
+  function toggleRecording() {
+    if (recording) {
+      speechRecognitionRef.current?.stop();
+      return;
+    }
+    const SR = (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
+      ?? (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    let finalText = "";
+    recognition.onresult = (e: SpeechRecognitionEvent) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      setLiveTranscript(finalText + interim);
+    };
+    recognition.onend = () => {
+      setRecording(false);
+      setLiveTranscript("");
+      if (finalText.trim()) sendMessage(finalText.trim());
+    };
+    speechRecognitionRef.current = recognition;
+    recognition.start();
+    setRecording(true);
+    setLiveTranscript("");
+  }
 
+  async function sendMessage(text: string, file?: File | null) {
     const tabId = activeTabId;
-    const typedText = input.trim();
-    let userMessage = typedText;
-    const file = attachedFile;
-    setInput("");
-    setAttachedFile(null);
+    let userMessage = text;
+    let imageFile: { image_data: string; content_type: string; filename: string } | null = null;
+
     setLoading(true);
     setLogs([]);
     setPendingSteps([]);
@@ -353,10 +386,13 @@ export default function Page() {
       });
       if (uploadRes.ok) {
         const uploadData = await uploadRes.json();
-        const task = userMessage
-          ? userMessage
-          : `Acknowledge receipt with "Received: [brief title/description]" on one line, then "Awaiting your instructions." on the next. Keep it brief. Do not display the file content.`;
-        userMessage = `[File: ${file.name}]\n${uploadData.content}\n\n${task}`;
+        if (uploadData.image_data) {
+          imageFile = uploadData;
+          userMessage = userMessage || `Acknowledge receipt with "Received: [brief title/description]" on one line, then "Awaiting your instructions." on the next. Keep it brief.`;
+        } else {
+          const task = userMessage || `Acknowledge receipt with "Received: [brief title/description]" on one line, then "Awaiting your instructions." on the next. Keep it brief. Do not display the file content.`;
+          userMessage = `[File: ${file.name}]\n${uploadData.content}\n\n${task}`;
+        }
       }
     }
 
@@ -371,18 +407,27 @@ export default function Page() {
     }
 
     const displayContent = file
-      ? `[File: ${file.name}]` + (typedText ? `\n\n${typedText}` : "")
+      ? `[File: ${file.name}]` + (text ? `\n\n${text}` : "")
       : userMessage;
     updateMessages(tabId, prev => [...prev, { role: "user", content: displayContent }]);
 
     const res = await fetch(`${BACKEND}/api/agent/chat/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
-      body: JSON.stringify({ message: userMessage, session_key: tabId }),
+      body: JSON.stringify({ message: userMessage, session_key: tabId, ...(imageFile ? { image_file: imageFile } : {}) }),
     });
 
     await readStream(res, tabId);
     setLoading(false);
+  }
+
+  async function send() {
+    if ((!input.trim() && !attachedFile) || loading) return;
+    const typedText = input.trim();
+    const file = attachedFile;
+    setInput("");
+    setAttachedFile(null);
+    await sendMessage(typedText, file);
   }
 
   async function confirm(action: PendingAction) {
@@ -455,10 +500,10 @@ export default function Page() {
             >
               <span className="truncate">{tab.label}</span>
               <button
-                className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-gray-300 transition-opacity leading-none shrink-0"
+                className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-gray-300 transition-opacity shrink-0"
                 onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
               >
-                ×
+                <X size={12} />
               </button>
             </div>
           ))}
@@ -488,14 +533,14 @@ export default function Page() {
                     onClick={() => toggleSteps(i)}
                     className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-400 mb-1"
                   >
-                    <span className="font-mono">{expandedSteps.has(i) ? "▾" : "▸"}</span>
+                    {expandedSteps.has(i) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     <span>Thought for {m.steps.length} step{m.steps.length !== 1 ? "s" : ""}</span>
                   </button>
                   {expandedSteps.has(i) && (
                     <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 space-y-1.5 mb-1">
                       {m.steps.map((step, j) => (
                         <div key={j} className="flex items-start gap-2 text-xs text-gray-400">
-                          <span className="text-green-500 mt-0.5 shrink-0">✓</span>
+                          <Check size={12} className="text-green-500 mt-0.5 shrink-0" />
                           {step.startsWith("Tool call: ")
                             ? <span className="font-mono text-blue-300">{step}</span>
                             : <span className="italic">{step}</span>
@@ -516,7 +561,7 @@ export default function Page() {
                     return (
                       <div className="flex flex-col gap-1.5">
                         <span className="inline-flex items-center gap-1.5 bg-blue-500/50 rounded px-2 py-1 text-xs font-mono">
-                          ⊕ {filename}
+                          <Paperclip size={11} /> {filename}
                         </span>
                         {rest && <span className="whitespace-pre-wrap">{rest}</span>}
                       </div>
@@ -654,21 +699,28 @@ export default function Page() {
               <div className="max-w-[75%] bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 space-y-1.5">
                 {pendingSteps.length === 0 ? (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span className="animate-pulse">●</span>
+                    <Loader2 size={12} className="animate-spin" />
                     <span>Thinking...</span>
                   </div>
                 ) : (
                   pendingSteps.map((step, i) => (
                     <div key={i} className="flex items-start gap-2 text-xs text-gray-400">
                       {i === pendingSteps.length - 1 ? (
-                        <span className="text-blue-400 animate-pulse mt-0.5 shrink-0">●</span>
+                        <Loader2 size={12} className="text-blue-400 animate-spin mt-0.5 shrink-0" />
                       ) : (
-                        <span className="text-green-500 mt-0.5 shrink-0">✓</span>
+                        <Check size={12} className="text-green-500 mt-0.5 shrink-0" />
                       )}
                       <span className="italic">{step}</span>
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          )}
+          {liveTranscript && (
+            <div className="flex flex-col items-end">
+              <div className="max-w-[75%] rounded-lg px-4 py-2 text-sm bg-blue-600 text-white opacity-70 italic">
+                {liveTranscript}
               </div>
             </div>
           )}
@@ -680,7 +732,7 @@ export default function Page() {
             <div className="flex items-center gap-2">
               <span className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded-lg flex items-center gap-1.5 max-w-xs truncate">
                 <span className="truncate">{attachedFile.name}</span>
-                <button onClick={() => setAttachedFile(null)} className="text-gray-500 hover:text-gray-300 shrink-0">×</button>
+                <button onClick={() => setAttachedFile(null)} className="text-gray-500 hover:text-gray-300 shrink-0"><X size={12} /></button>
               </span>
             </div>
           )}
@@ -689,16 +741,24 @@ export default function Page() {
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept="image/*,.pdf,.docx,.xlsx,.csv"
+              accept="image/*,.pdf,.docx,.xlsx,.csv,.mp3,.wav,.m4a,.ogg"
               onChange={(e) => setAttachedFile(e.target.files?.[0] ?? null)}
             />
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={loading}
-              className="px-3 py-2 text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40 text-base leading-none"
+              className="px-3 py-2 text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40"
               title="Attach file"
             >
-              ⊕
+              <Paperclip size={18} />
+            </button>
+            <button
+              onClick={toggleRecording}
+              disabled={loading}
+              className={`px-3 py-2 transition-colors disabled:opacity-40 ${recording ? "text-red-500" : "text-gray-500 hover:text-gray-300"}`}
+              title={recording ? "Stop recording" : "Record audio"}
+            >
+              {recording ? <Square size={18} /> : <Mic size={18} />}
             </button>
             <input
               className="flex-1 bg-gray-800 rounded-lg px-4 py-2 text-sm outline-none placeholder-gray-500 focus:ring-1 focus:ring-blue-600"
@@ -709,11 +769,12 @@ export default function Page() {
               disabled={loading}
             />
             <button
-              className="px-4 py-2 bg-blue-600 rounded-lg text-sm font-medium disabled:opacity-40 hover:bg-blue-500 transition-colors"
+              className="px-3 py-2 bg-blue-600 rounded-lg disabled:opacity-40 hover:bg-blue-500 transition-colors"
               onClick={send}
               disabled={loading || (!input.trim() && !attachedFile)}
+              title="Send"
             >
-              Send
+              <Send size={18} />
             </button>
           </div>
         </div>
@@ -788,7 +849,7 @@ export default function Page() {
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
               <span className="text-sm font-medium text-gray-300">Recently Closed</span>
-              <button className="text-gray-500 hover:text-gray-300 text-lg leading-none" onClick={() => setHistoryOpen(false)}>×</button>
+              <button className="text-gray-500 hover:text-gray-300" onClick={() => setHistoryOpen(false)}><X size={16} /></button>
             </div>
             <div className="overflow-y-auto py-1">
               {closedTabs.map(tab => (
@@ -800,10 +861,10 @@ export default function Page() {
                     {tab.label}
                   </button>
                   <button
-                    className="text-gray-600 hover:text-red-400 text-sm opacity-0 group-hover:opacity-100 shrink-0 transition-colors"
+                    className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0 transition-colors"
                     onClick={() => deleteClosedTab(tab.id)}
                   >
-                    ×
+                    <X size={14} />
                   </button>
                 </div>
               ))}
