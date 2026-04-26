@@ -23,6 +23,9 @@ build/
 *.sqlite3
 *.db
 
+# Generated artifacts
+generator/artifacts/output/
+
 # VSCode
 .vscode/
 
