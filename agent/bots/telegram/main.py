@@ -30,10 +30,11 @@ async def run(token: str, bot_id: str, role: str, progress_queue: asyncio.Queue 
             session=session, user=None, role=ChatMessage.Role.USER, content=text, artifacts=[],
         )
 
-        _agent._user_role.set(role)
-        _agent._user_id.set(None)
-        _agent._source.set("telegram")
-        _agent._bot_id.set(bot_id)
+        # _agent._user_role.set(role)
+        # _agent._user_id.set(None)
+        # _agent._source.set("telegram")
+        # _agent._bot_id.set(bot_id)
+        _agent.set_context(user_role=role, user_id=None, source="telegram", bot_id=bot_id)
 
         artifact_queue = asyncio.Queue()
         current_task = asyncio.current_task()

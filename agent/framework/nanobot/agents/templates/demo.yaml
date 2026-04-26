@@ -1,0 +1,123 @@
+agents:
+  - name: demo_purchase_agent
+    description: Handles purchase orders and vendor operations (demo/SQLite)
+    prompt: |-
+      You are a Purchase Agent specializing in procurement operations.
+      Your job is to fulfill the assigned task using the available tools.
+      Focus only on purchase orders and vendor data. Be concise and accurate.
+    formats: [response, write, po, error]
+    allowed_tools:
+      - mcp_sqlite_get_purchase_orders
+      - mcp_sqlite_create_purchase_order
+      - mcp_sqlite_update_purchase_order
+      - mcp_sqlite_get_vendors
+      - mcp_sqlite_get_products
+      - mcp_sqlite_create_vendor_bill
+      - mcp_sqlite_register_payment
+    requires_write_access: true
+    tool_config:
+      mcp_sqlite_create_purchase_order:
+        requires_confirmation: true
+        max:
+          quantity: 1000
+        audit_keys: [order_id, invoice_id]
+      mcp_sqlite_update_purchase_order:
+        requires_confirmation: true
+        audit_keys: [order_id, invoice_id, payment_id]
+      mcp_sqlite_create_vendor_bill:
+        requires_confirmation: true
+        audit_keys: [order_id, invoice_id, payment_id]
+      mcp_sqlite_register_payment:
+        requires_confirmation: true
+        audit_keys: [order_id, invoice_id, payment_id]
+
+  - name: demo_sales_agent
+    description: Handles sales orders and customer operations (demo/SQLite)
+    prompt: |-
+      You are a Sales Agent specializing in sales order management.
+      Your job is to fulfill the assigned task using the available tools.
+      Focus only on sales orders and customer data. Be concise and accurate.
+    formats: [response, write, error]
+    allowed_tools:
+      - mcp_sqlite_get_sales_orders
+      - mcp_sqlite_create_sales_order
+      - mcp_sqlite_confirm_sales_order
+      - mcp_sqlite_update_sales_order
+      - mcp_sqlite_get_customers
+      - mcp_sqlite_get_products
+    requires_write_access: true
+    tool_config:
+      mcp_sqlite_create_sales_order:
+        requires_confirmation: true
+        max:
+          quantity: 1000
+        audit_keys: [order_id, invoice_id]
+      mcp_sqlite_confirm_sales_order:
+        requires_confirmation: true
+        audit_keys: [order_id, invoice_id, payment_id]
+      mcp_sqlite_update_sales_order:
+        requires_confirmation: true
+        audit_keys: [order_id, invoice_id, payment_id]
+
+  - name: demo_invoice_agent
+    description: Handles customer invoices and vendor bills (demo/SQLite)
+    prompt: |-
+      You are an Invoice Agent specializing in accounts receivable and payable.
+      Your job is to fulfill the assigned task using the available tools.
+      Focus only on invoices, vendor bills, and related customer data. Be concise and accurate.
+    formats: [response, write, error]
+    allowed_tools:
+      - mcp_sqlite_get_invoices
+      - mcp_sqlite_get_vendor_bills
+      - mcp_sqlite_create_customer_invoice
+      - mcp_sqlite_create_vendor_bill
+      - mcp_sqlite_update_invoice
+      - mcp_sqlite_register_payment
+      - mcp_sqlite_get_customers
+    requires_write_access: true
+    tool_config:
+      mcp_sqlite_create_customer_invoice:
+        requires_confirmation: true
+        max:
+          quantity: 1000
+          price_unit: 100000
+        audit_keys: [order_id, invoice_id]
+      mcp_sqlite_create_vendor_bill:
+        requires_confirmation: true
+        audit_keys: [order_id, invoice_id, payment_id]
+      mcp_sqlite_update_invoice:
+        requires_confirmation: true
+        audit_keys: [order_id, invoice_id, payment_id]
+      mcp_sqlite_register_payment:
+        requires_confirmation: true
+        audit_keys: [order_id, invoice_id, payment_id]
+
+  - name: demo_inventory_agent
+    description: Handles product catalog and inventory queries (demo/SQLite)
+    prompt: |-
+      You are an Inventory Agent specializing in stock and product management.
+      Your job is to fulfill the assigned task using the available tools.
+      Focus only on product and inventory data. Be concise and accurate.
+    formats: [response, error]
+    allowed_tools:
+      - mcp_sqlite_get_products
+    requires_write_access: false
+    tool_config: {}
+
+  - name: demo_analytics_agent
+    description: Handles cross-functional reporting and data analysis (demo/SQLite)
+    prompt: |-
+      You are an Analytics Agent specializing in ERP data analysis and reporting.
+      Your job is to fulfill the assigned task using the available tools.
+      Retrieve relevant data, summarize findings clearly, and highlight key insights.
+    formats: [response, chart, error]
+    allowed_tools:
+      - mcp_sqlite_get_sales_orders
+      - mcp_sqlite_get_purchase_orders
+      - mcp_sqlite_get_invoices
+      - mcp_sqlite_get_vendor_bills
+      - mcp_sqlite_get_customers
+      - mcp_sqlite_get_vendors
+      - mcp_sqlite_get_products
+    requires_write_access: false
+    tool_config: {}

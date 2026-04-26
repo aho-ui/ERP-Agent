@@ -1,5 +1,6 @@
 import asyncio
 from contextvars import ContextVar
+from dataclasses import dataclass, replace
 
 from loguru import logger
 from nanobot.agent.loop import AgentLoop
@@ -8,17 +9,38 @@ from nanobot.config.schema import MCPServerConfig
 from MCP.config import SERVERS
 from MCP.utils.health import check_all as _check_mcp_health
 from agent.framework.nanobot.config.loader import load
-from agent.framework.nanobot.utils.dispatch import DispatchTool
+from agent.framework.nanobot.agents.dispatch import DispatchTool
 
 _agent_loop: AgentLoop | None = None
 _task_queues: dict[int, asyncio.Queue] = {}
 _healthy_servers: set[str] = set()
 
-_user_role: ContextVar[str] = ContextVar("user_role", default="viewer")
-_user_id: ContextVar[str | None] = ContextVar("user_id", default=None)
-_run_id: ContextVar[str | None] = ContextVar("run_id", default=None)
-_source: ContextVar[str] = ContextVar("source", default="web")
-_bot_id: ContextVar[str | None] = ContextVar("bot_id", default=None)
+
+@dataclass
+class AgentContext:
+    user_role: str = "viewer"
+    user_id: str | None = None
+    run_id: str | None = None
+    source: str = "web"
+    bot_id: str | None = None
+
+
+_ctx: ContextVar[AgentContext] = ContextVar("agent_ctx", default=AgentContext())
+
+
+def set_context(**kwargs) -> None:
+    _ctx.set(replace(_ctx.get(), **kwargs))
+
+
+def get_context() -> AgentContext:
+    return _ctx.get()
+
+
+# _user_role: ContextVar[str] = ContextVar("user_role", default="viewer")
+# _user_id: ContextVar[str | None] = ContextVar("user_id", default=None)
+# _run_id: ContextVar[str | None] = ContextVar("run_id", default=None)
+# _source: ContextVar[str] = ContextVar("source", default="web")
+# _bot_id: ContextVar[str | None] = ContextVar("bot_id", default=None)
 
 
 def _tool_call_sink(message):

@@ -192,8 +192,9 @@ async def bot_chat(request, bot_id, session_id):
 
     from agent.framework.agent import get_agent
     _agent = get_agent("nanobot")
-    _agent._user_role.set(bot.role)
-    _agent._user_id.set(None)
+    # _agent._user_role.set(bot.role)
+    # _agent._user_id.set(None)
+    _agent.set_context(user_role=bot.role, user_id=None)
 
     agent_loop = _agent.get_agent_loop()
     try:

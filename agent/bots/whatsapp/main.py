@@ -52,10 +52,11 @@ async def webhook(request, bot_id):
         session=session, user=None, role=ChatMessage.Role.USER, content=body, artifacts=[],
     )
 
-    _agent._user_role.set(bot.role)
-    _agent._user_id.set(None)
-    _agent._source.set("whatsapp")
-    _agent._bot_id.set(str(bot_id))
+    # _agent._user_role.set(bot.role)
+    # _agent._user_id.set(None)
+    # _agent._source.set("whatsapp")
+    # _agent._bot_id.set(str(bot_id))
+    _agent.set_context(user_role=bot.role, user_id=None, source="whatsapp", bot_id=str(bot_id))
 
     agent_loop = _agent.get_agent_loop()
 

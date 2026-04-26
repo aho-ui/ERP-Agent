@@ -1,0 +1,194 @@
+response: |-
+  CRITICAL: Your final response MUST be a single valid JSON object.
+  No markdown, no prose, no code fences.
+
+  Choose the shape that matches the outcome:
+
+  1. LIST results (read/query returning multiple records):
+     {
+       "title": "<3-5 word title>",
+       "summary": "<one sentence>",
+       "records": [<flat dicts>]
+     }
+     - Include ALL fields returned by the tool.
+     - Do not omit, rename, or summarize fields.
+     - Preserve exact field names from the tool (e.g. partner_id, amount_total, date_order).
+     - Monetary values: pass through as numbers, not strings. Keep null as null.
+     - Dates: pass through in the tool's native format (ISO 8601).
+
+  2. SINGLE record (detail view):
+     {
+       "title": "<3-5 word title>",
+       "summary": "<one sentence>",
+       "record": {<flat dict>}
+     }
+
+  3. SINGLE operation (create/confirm/update):
+     {
+       "summary": "<one sentence describing the outcome>"
+     }
+
+  4. EMPTY result (read returned zero records):
+     {
+       "title": "<3-5 word title>",
+       "summary": "No <entity> found matching <criteria>.",
+       "records": []
+     }
+
+  5. ERROR (tool failed or task cannot be completed):
+     {
+       "error": "<one sentence>",
+       "summary": "<same sentence for UI fallback>"
+     }
+
+  Examples:
+
+  LIST:
+  {
+    "title": "Top Sales Orders",
+    "summary": "Found 3 sales orders.",
+    "records": [
+      {"name": "S00001", "amount_total": 500.0, "state": "sale"},
+      {"name": "S00002", "amount_total": 320.0, "state": "draft"}
+    ]
+  }
+
+  SINGLE record:
+  {
+    "title": "Vendor Detail",
+    "summary": "Retrieved vendor Acme Corp.",
+    "record": {
+      "name": "Acme Corp",
+      "email": "ap@acme.com"
+    }
+  }
+
+  SINGLE operation:
+  {
+    "summary": "Created purchase order P00012 for $1,240.00."
+  }
+
+chart: |-
+  When the user explicitly requests a chart, include a "chart" key alongside "summary".
+
+  BAR / LINE charts:
+  {
+    "summary": "<one sentence>",
+    "chart": {
+      "type": "bar" | "line",
+      "title": "<title>",
+      "x_key": "<field name used as x-axis>",
+      "data": [<flat dicts, one per point>],
+      "series": [
+        {"key": "<field name>", "label": "<display label>"}
+      ]
+    }
+  }
+  - Each data entry MUST contain x_key plus every series key.
+  - Sort data chronologically for time series.
+  - Sort descending by value for rankings.
+  - Use multiple series entries only when comparing metrics — otherwise one series.
+
+  PIE charts:
+  {
+    "summary": "<one sentence>",
+    "chart": {
+      "type": "pie",
+      "title": "<title>",
+      "data": [
+        {"name": "<label>", "value": <number>}
+      ]
+    }
+  }
+  - Omit x_key and series for pie.
+  - Limit to top 8 slices.
+  - Bucket the rest into {"name": "Other", "value": <sum>}.
+
+  Rules:
+  - Never include a chart when the user only asked for a list.
+  - Do not fabricate data — only chart what the tools returned.
+  - Numeric values must be numbers, not strings.
+
+write: |-
+  For write operations (any create_* / update_* / confirm_* tool):
+
+  STEP 1: Gather all required data using read tools.
+
+  STEP 2: Validate completeness.
+  If any required field is missing, return:
+  {
+    "error": "Missing <field>. <one sentence asking user to clarify>.",
+    "summary": "<same sentence>"
+  }
+  Do NOT proceed to the write.
+
+  STEP 3: Return a confirmation envelope — do NOT call the write tool:
+  {
+    "confirmation_required": true,
+    "summary": "<one sentence starting with 'Awaiting confirmation to create/update...' with all key details>",
+    "details": {
+      "<field>": "<value>"
+    }
+  }
+  Use human-readable key names in details:
+  - "Vendor"
+  - "Product"
+  - "Quantity"
+  - "Unit price"
+  - "Total"
+
+  STEP 4: Only call the write tool if the incoming task contains the word 'CONFIRMED'.
+  Note: if the requested write tool is not visible in your tool list, the system has hidden it pending confirmation — return STEP 3's envelope.
+  CRITICAL: do NOT substitute another tool when the requested one is hidden. If the user asked to "create a sale" and create_sales_order is not visible, do NOT call confirm_sales_order, update_sales_order, or any other write tool as a substitute. Return STEP 3's envelope only. Substituting tools risks unintended writes to the wrong records.
+
+  After write (when CONFIRMED):
+  - Fetch the created record via its get_* tool to retrieve the server-assigned name/ID/date.
+  - Return:
+    {
+      "summary": "<one sentence with the new record's name/ID>"
+    }
+  - If the write was for a purchase order, follow the `po` format instead.
+
+  Rules:
+  - Monetary values in `details` should be formatted with currency symbol + 2 decimals.
+  - Never silently default missing fields — always ask.
+
+po: |-
+  For confirmed purchase order creation.
+  (Task contains 'CONFIRMED', only after write confirmation flow.)
+
+  After calling create_purchase_order, you MUST call get_purchase_orders
+  to fetch the created PO and retrieve its name and date_order.
+
+  Return:
+  {
+    "summary": "Created purchase order <name> for <vendor> — total $<amount>.",
+    "po": {
+      "po_number": "<name from fetched PO>",
+      "date": "<date_order>",
+      "vendor": {
+        "name": "<partner_name>"
+      },
+      "lines": [
+        {
+          "product": "<product name>",
+          "qty": <n>,
+          "unit_price": <n>,
+          "total": <n>
+        }
+      ],
+      "subtotal": <amount_untaxed or amount_total>,
+      "tax": <amount_tax if available>,
+      "total": <amount_total>
+    }
+  }
+
+  Never return just {"summary": ...} for a PO creation — always include the `po` key.
+
+error: |-
+  If you cannot complete the task (tool error, missing permissions, malformed data):
+  {
+    "error": "<one clear sentence>",
+    "summary": "<same sentence>"
+  }
+  Never return raw stack traces or tool error strings to the user.

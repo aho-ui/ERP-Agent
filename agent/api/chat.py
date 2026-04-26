@@ -40,11 +40,13 @@ PROVIDER = os.environ.get("AGENT_PROVIDER", "nanobot")
 _agent = get_agent(PROVIDER)
 get_agent_loop = _agent.get_agent_loop
 _task_queues = _agent._task_queues
-_user_role = _agent._user_role
-_user_id = _agent._user_id
-_run_id = _agent._run_id
-_source = _agent._source
-_bot_id = _agent._bot_id
+_set_context = _agent.set_context
+_get_context = _agent.get_context
+# _user_role = _agent._user_role
+# _user_id = _agent._user_id
+# _run_id = _agent._run_id
+# _source = _agent._source
+# _bot_id = _agent._bot_id
 
 
 @csrf_exempt
@@ -65,11 +67,12 @@ async def chat(request):
 
     image_file = body.get("image_file")
     session_key = body.get("session_key", "api:default")
-    _user_role.set(role)
-    _user_id.set(user_id)
-    _run_id.set(str(uuid.uuid4()))
-    _source.set("web")
-    _bot_id.set(None)
+    # _user_role.set(role)
+    # _user_id.set(user_id)
+    # _run_id.set(str(uuid.uuid4()))
+    # _source.set("web")
+    # _bot_id.set(None)
+    _set_context(user_role=role, user_id=user_id, run_id=str(uuid.uuid4()), source="web", bot_id=None)
     queue = CollectingQueue()
 
     save_content = f"[Image: {image_file['filename']}]" + (f"\n\n{message}" if message else "") if image_file else message
@@ -88,7 +91,7 @@ async def chat(request):
                 with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
                     tmp.write(data)
                     tmp_path = tmp.name
-                await agent_loop._connect_mcp()
+                # await agent_loop._connect_mcp()  # pre-warmed in asgi.py:_on_startup
                 inbound = InboundMessage(
                     channel="web",
                     sender_id=str(user_id),
@@ -148,8 +151,16 @@ async def confirm_action(request, action_id):
         body = {}
     session_key = body.get("session_key", "")
 
-    _user_role.set(role)
-    _user_id.set(user_id)
+    # _user_role.set(role)
+    # _user_id.set(user_id)
+    # _set_context(user_role=role, user_id=user_id)
+    _set_context(
+        user_role=role,
+        user_id=user_id,
+        run_id=action.run_id,
+        source=action.source,
+        bot_id=action.bot_id,
+    )
     queue = asyncio.Queue()
 
     async def run_confirmed():
@@ -162,7 +173,8 @@ async def confirm_action(request, action_id):
             confirmed_task = pending_summary + "\nUser has confirmed. Proceed with the write operation. CONFIRMED."
             await AgentAction.objects.filter(id=action_id).aupdate(
                 status=AgentAction.Status.APPROVED,
-                approved_by_id=_user_id.get(),
+                # approved_by_id=_user_id.get(),
+                approved_by_id=_get_context().user_id,
             )
             result = await dispatch.execute(agent_name=action.agent_name, task=confirmed_task)
             # store result in approved action for stream-drop recovery
@@ -181,7 +193,8 @@ async def confirm_action(request, action_id):
             except Exception:
                 pass
             if session_key:
-                await _save_message(session_key, _user_id.get(), ChatMessage.Role.ASSISTANT, result, new_action.artifacts if new_action else [])
+                # await _save_message(session_key, _user_id.get(), ChatMessage.Role.ASSISTANT, result, new_action.artifacts if new_action else [])
+                await _save_message(session_key, _get_context().user_id, ChatMessage.Role.ASSISTANT, result, new_action.artifacts if new_action else [])
             await queue.put({"type": "response", "content": result})
         except Exception as e:
             await AgentAction.objects.filter(id=action_id).aupdate(

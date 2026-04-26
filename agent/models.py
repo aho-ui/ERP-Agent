@@ -73,9 +73,13 @@ class AgentTemplate(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="agent_templates")
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=Type.choices)
+    description = models.TextField(blank=True, default="")
     instructions = models.TextField()
     allowed_tools = models.JSONField(default=list)
+    tool_config = models.JSONField(default=dict)
+    requires_write_access = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
