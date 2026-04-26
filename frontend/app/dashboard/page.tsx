@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useApi, BACKEND } from "../lib/api";
+import { PendingActionCard } from "../components/PendingActionCard";
+import type { PendingAction } from "../lib/types";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -235,13 +237,42 @@ function McpPanel({
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { apiFetch } = useApi();
+  const { apiFetch, authHeader } = useApi();
   const [data, setData] = useState<DashboardData | null>(null);
   const [activeTab, setActiveTab] = useState<string>("");
   const [callsCache, setCallsCache] = useState<Record<string, CallRecord[]>>({});
   const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
   const [source, setSource] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
+  const [pending, setPending] = useState<PendingAction[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+
+  const loadPending = useCallback(async () => {
+    const rows = await apiFetch<PendingAction[]>(`${BACKEND}/api/agent/pending/`);
+    if (Array.isArray(rows)) setPending(rows);
+  }, [apiFetch]);
+
+  async function confirmPending(action: PendingAction) {
+    setPendingLoading(true);
+    setPending((prev) => prev.filter((a) => a.action_id !== action.action_id));
+    await fetch(`${BACKEND}/api/agent/confirm/${action.action_id}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ session_key: "" }),
+    });
+    setPendingLoading(false);
+    loadPending();
+  }
+
+  async function cancelPending(action: PendingAction) {
+    setPending((prev) => prev.filter((a) => a.action_id !== action.action_id));
+    await fetch(`${BACKEND}/api/agent/cancel/${action.action_id}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({ session_key: "" }),
+    });
+    loadPending();
+  }
 
   function filterParams() {
     const p = new URLSearchParams();
@@ -284,6 +315,7 @@ export default function DashboardPage() {
         if (first) loadCalls(first);
       })
       .catch(() => {});
+    loadPending();
   }, [router]);
 
   useEffect(() => {
@@ -329,6 +361,22 @@ export default function DashboardPage() {
         </aside>
 
         <main className="flex-1 overflow-y-auto px-8 py-6">
+          {pending.length > 0 && (
+            <div className="mb-6">
+              <SectionHeading>Pending Actions ({pending.length})</SectionHeading>
+              <div className="flex flex-wrap gap-3">
+                {pending.map((action) => (
+                  <PendingActionCard
+                    key={action.action_id}
+                    action={action}
+                    loading={pendingLoading}
+                    onConfirm={confirmPending}
+                    onCancel={cancelPending}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-3 mb-5 flex-wrap">
             <div className="flex gap-1">
               {["all", "web", "discord", "telegram"].map(s => (

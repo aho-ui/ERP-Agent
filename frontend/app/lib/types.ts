@@ -1,0 +1,12 @@
+export type TableArtifact = { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string };
+export type ChartArtifact = { artifact_type: "chart"; chart_type: "bar" | "line" | "pie"; title: string; x_key?: string; series?: { key: string; label: string }[]; data: Record<string, unknown>[] };
+export type ImageArtifact = { artifact_type: "image"; content: string; columns?: string[]; rows?: unknown[][]; title?: string };
+export type PoLine = { product: string; qty: number; unit_price: number; total: number };
+export type PoData = { po_number?: string; date?: string; vendor?: { name: string }; lines?: PoLine[]; subtotal?: number; tax?: number; total?: number };
+export type PdfArtifact = { artifact_type: "pdf"; content: string; title?: string; data?: PoData };
+export type Artifact = TableArtifact | ChartArtifact | ImageArtifact | PdfArtifact;
+export type Message = { role: "user" | "assistant"; content: string; steps?: string[]; artifacts?: Artifact[]; pendingAction?: PendingAction; pendingStatus?: "pending" | "confirmed" | "cancelled" };
+export type Tab = { id: string; label: string; messages: Message[] };
+export type LogEntry = { content: string; timestamp: string };
+export type McpServer = { name: string; transport: string; status: "ok" | "error" };
+export type PendingAction = { action_id: string; summary: string; details?: Record<string, unknown>; agent_name: string; timestamp: string };

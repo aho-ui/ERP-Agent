@@ -5,20 +5,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronRight, Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { useApi, BACKEND } from "./lib/api";
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import type { Artifact, ImageArtifact, Message, PdfArtifact, PendingAction, McpServer, LogEntry, Tab, TableArtifact } from "./lib/types";
+import { renderMarkdown } from "./lib/markdown";
+import { ChartWidget } from "./components/ChartWidget";
+import { ActivitySidebar } from "./components/ActivitySidebar";
+import { PendingActionCard } from "./components/PendingActionCard";
+import { HistoryModal } from "./components/HistoryModal";
 
-type TableArtifact = { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string };
-type ChartArtifact = { artifact_type: "chart"; chart_type: "bar" | "line" | "pie"; title: string; x_key?: string; series?: { key: string; label: string }[]; data: Record<string, unknown>[] };
-type ImageArtifact = { artifact_type: "image"; content: string; columns?: string[]; rows?: unknown[][]; title?: string };
-type PoLine = { product: string; qty: number; unit_price: number; total: number };
-type PoData = { po_number?: string; date?: string; vendor?: { name: string }; lines?: PoLine[]; subtotal?: number; tax?: number; total?: number };
-type PdfArtifact = { artifact_type: "pdf"; content: string; title?: string; data?: PoData };
-type Artifact = TableArtifact | ChartArtifact | ImageArtifact | PdfArtifact;
-type Message = { role: "user" | "assistant"; content: string; steps?: string[]; artifacts?: Artifact[] };
-type Tab = { id: string; label: string; messages: Message[] };
-type LogEntry = { content: string; timestamp: string };
-type McpServer = { name: string; transport: string; status: "ok" | "error" };
-type PendingAction = { action_id: string; summary: string; details?: Record<string, unknown>; agent_name: string; timestamp: string };
+// Types moved to ./lib/types
+// type TableArtifact = { artifact_type: "table"; columns: string[]; rows: unknown[][]; title?: string };
+// type ChartArtifact = { artifact_type: "chart"; chart_type: "bar" | "line" | "pie"; title: string; x_key?: string; series?: { key: string; label: string }[]; data: Record<string, unknown>[] };
+// type ImageArtifact = { artifact_type: "image"; content: string; columns?: string[]; rows?: unknown[][]; title?: string };
+// type PoLine = { product: string; qty: number; unit_price: number; total: number };
+// type PoData = { po_number?: string; date?: string; vendor?: { name: string }; lines?: PoLine[]; subtotal?: number; tax?: number; total?: number };
+// type PdfArtifact = { artifact_type: "pdf"; content: string; title?: string; data?: PoData };
+// type Artifact = TableArtifact | ChartArtifact | ImageArtifact | PdfArtifact;
+// type Message = { role: "user" | "assistant"; content: string; steps?: string[]; artifacts?: Artifact[] };
+// type Tab = { id: string; label: string; messages: Message[] };
+// type LogEntry = { content: string; timestamp: string };
+// type McpServer = { name: string; transport: string; status: "ok" | "error" };
+// type PendingAction = { action_id: string; summary: string; details?: Record<string, unknown>; agent_name: string; timestamp: string };
 
 // const BACKEND = "http://localhost:8000";
 
@@ -26,67 +32,32 @@ function newTab(label = "New Chat"): Tab {
   return { id: crypto.randomUUID(), label, messages: [] };
 }
 
-function renderInline(line: string) {
-  const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith("*") && part.endsWith("*")) return <em key={i}>{part.slice(1, -1)}</em>;
-    if (part.startsWith("`") && part.endsWith("`")) return <code key={i} className="bg-gray-700 px-1 rounded text-xs font-mono">{part.slice(1, -1)}</code>;
-    return <span key={i}>{part}</span>;
-  });
-}
+// Markdown helpers moved to ./lib/markdown
+// function renderInline(line: string) {
+//   const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
+//   return parts.map((part, i) => {
+//     if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
+//     if (part.startsWith("*") && part.endsWith("*")) return <em key={i}>{part.slice(1, -1)}</em>;
+//     if (part.startsWith("`") && part.endsWith("`")) return <code key={i} className="bg-gray-700 px-1 rounded text-xs font-mono">{part.slice(1, -1)}</code>;
+//     return <span key={i}>{part}</span>;
+//   });
+// }
+//
+// function renderMarkdown(text: string) {
+//   return text.split("\n").map((line, i) => (
+//     <span key={i}>{i > 0 && <br />}{renderInline(line)}</span>
+//   ));
+// }
 
-function renderMarkdown(text: string) {
-  return text.split("\n").map((line, i) => (
-    <span key={i}>{i > 0 && <br />}{renderInline(line)}</span>
-  ));
-}
-
-
-const CHART_COLORS = ["#6366f1", "#22d3ee", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
-
-function ChartWidget({ artifact }: { artifact: ChartArtifact }) {
-  const { chart_type, data, x_key, series } = artifact;
-  if (chart_type === "pie") {
-    return (
-      <ResponsiveContainer width="100%" height={280}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
-            {data.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-          </Pie>
-          <Tooltip />
-          <Legend verticalAlign="bottom" height={36} />
-        </PieChart>
-      </ResponsiveContainer>
-    );
-  }
-  if (chart_type === "line") {
-    return (
-      <ResponsiveContainer width="100%" height={260}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis dataKey={x_key} tick={{ fontSize: 10, fill: "#9ca3af" }} />
-          <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
-          <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "none", fontSize: 11 }} />
-          {series && series.length > 0 && <Legend wrapperStyle={{ fontSize: 11 }} />}
-          {(series ?? []).map((s, i) => <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={CHART_COLORS[i % CHART_COLORS.length]} dot={false} />)}
-        </LineChart>
-      </ResponsiveContainer>
-    );
-  }
-  return (
-    <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-        <XAxis dataKey={x_key} tick={{ fontSize: 10, fill: "#9ca3af" }} />
-        <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
-        <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "none", fontSize: 11 }} />
-        {series && series.length > 0 && <Legend wrapperStyle={{ fontSize: 11 }} />}
-        {(series ?? []).map((s, i) => <Bar key={s.key} dataKey={s.key} name={s.label} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
+// ChartWidget moved to ./components/ChartWidget
+// const CHART_COLORS = ["#6366f1", "#22d3ee", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"];
+//
+// function ChartWidget({ artifact }: { artifact: ChartArtifact }) {
+//   const { chart_type, data, x_key, series } = artifact;
+//   if (chart_type === "pie") { ... }
+//   if (chart_type === "line") { ... }
+//   return ( <BarChart ... /> );
+// }
 
 export default function Page() {
   const router = useRouter();
@@ -106,7 +77,7 @@ export default function Page() {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [refreshInterval, setRefreshInterval] = useState(10);
-  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  // const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [userRole, setUserRole] = useState<string>("");
 
   useEffect(() => {
@@ -264,15 +235,13 @@ export default function Page() {
     return () => clearInterval(id);
   }, [refreshInterval]);
 
-  useEffect(() => {
-    async function fetchPending() {
-      try {
-        const data = await apiFetch<PendingAction[]>(`${BACKEND}/api/agent/pending/`);
-        if (data) setPendingActions(data);
-      } catch {}
-    }
-    fetchPending();
-  }, []);
+  // useEffect(() => {
+  //   async function fetchPending() {
+  //     const data = await apiFetch<PendingAction[]>(`${BACKEND}/api/agent/pending/`);
+  //     if (data) setPendingActions(data);
+  //   }
+  //   fetchPending();
+  // }, []);
 
   function toggleSteps(index: number) {
     setExpandedSteps((prev) => {
@@ -316,16 +285,15 @@ export default function Page() {
           const lastTable = [...localArtifacts].reverse().find(a => a.artifact_type === "table") as TableArtifact | undefined;
           localArtifacts = [...localArtifacts, { artifact_type: "image", content: event.content, columns: lastTable?.columns, rows: lastTable?.rows, title: lastTable?.title } as ImageArtifact];
         } else if (event.type === "confirmation") {
-          setPendingActions((prev) => [
-            ...prev,
-            {
-              action_id: event.action_id,
-              summary: event.summary,
-              details: event.details ?? {},
-              agent_name: "",
-              timestamp: new Date().toISOString(),
-            },
-          ]);
+          // setPendingActions((prev) => [...prev, { ... }]);
+          const action: PendingAction = {
+            action_id: event.action_id,
+            summary: event.summary,
+            details: event.details ?? {},
+            agent_name: "",
+            timestamp: new Date().toISOString(),
+          };
+          updateMessages(tabId, prev => [...prev, { role: "assistant", content: "", pendingAction: action, pendingStatus: "pending" }]);
         } else if (event.type === "response") {
           updateMessages(tabId, prev => [...prev, { role: "assistant", content: event.content, steps: localSteps, artifacts: localArtifacts }]);
           setPendingSteps([]);
@@ -339,8 +307,9 @@ export default function Page() {
       speechRecognitionRef.current?.stop();
       return;
     }
-    const SR = (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
-      ?? (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    // const SR = (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
+    //   ?? (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    const SR = typeof SpeechRecognition !== "undefined" ? SpeechRecognition : webkitSpeechRecognition;
     if (!SR) return;
     const recognition = new SR();
     recognition.continuous = true;
@@ -430,9 +399,16 @@ export default function Page() {
     await sendMessage(typedText, file);
   }
 
+  function setPendingStatus(tabId: string, actionId: string, status: "confirmed" | "cancelled") {
+    updateMessages(tabId, prev => prev.map(m =>
+      m.pendingAction?.action_id === actionId ? { ...m, pendingStatus: status } : m
+    ));
+  }
+
   async function confirm(action: PendingAction) {
     const tabId = activeTabId;
-    setPendingActions((prev) => prev.filter((a) => a.action_id !== action.action_id));
+    // setPendingActions((prev) => prev.filter((a) => a.action_id !== action.action_id));
+    setPendingStatus(tabId, action.action_id, "confirmed");
     setLoading(true);
     setLogs([]);
     setPendingSteps([]);
@@ -449,7 +425,8 @@ export default function Page() {
 
   async function cancel(action: PendingAction) {
     const tabId = activeTabId;
-    setPendingActions((prev) => prev.filter((a) => a.action_id !== action.action_id));
+    // setPendingActions((prev) => prev.filter((a) => a.action_id !== action.action_id));
+    setPendingStatus(tabId, action.action_id, "cancelled");
     await fetch(`${BACKEND}/api/agent/cancel/${action.action_id}/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
@@ -551,25 +528,35 @@ export default function Page() {
                   )}
                 </div>
               )}
-              <div className={`max-w-[75%] rounded-lg px-4 py-2 text-sm ${
-                m.role === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"
-              }`}>
-                {m.role === "user" ? (() => {
-                  if (m.content.startsWith("[File: ")) {
-                    const filename = m.content.slice(7, m.content.indexOf("]"));
-                    const rest = m.content.indexOf("\n\n") >= 0 ? m.content.slice(m.content.indexOf("\n\n") + 2) : "";
-                    return (
-                      <div className="flex flex-col gap-1.5">
-                        <span className="inline-flex items-center gap-1.5 bg-blue-500/50 rounded px-2 py-1 text-xs font-mono">
-                          <Paperclip size={11} /> {filename}
-                        </span>
-                        {rest && <span className="whitespace-pre-wrap">{rest}</span>}
-                      </div>
-                    );
-                  }
-                  return <span className="whitespace-pre-wrap">{m.content}</span>;
-                })() : renderMarkdown(m.content)}
-              </div>
+              {m.pendingAction ? (
+                <PendingActionCard
+                  action={m.pendingAction}
+                  status={m.pendingStatus}
+                  loading={loading}
+                  onConfirm={confirm}
+                  onCancel={cancel}
+                />
+              ) : (
+                <div className={`max-w-[75%] rounded-lg px-4 py-2 text-sm ${
+                  m.role === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"
+                }`}>
+                  {m.role === "user" ? (() => {
+                    if (m.content.startsWith("[File: ")) {
+                      const filename = m.content.slice(7, m.content.indexOf("]"));
+                      const rest = m.content.indexOf("\n\n") >= 0 ? m.content.slice(m.content.indexOf("\n\n") + 2) : "";
+                      return (
+                        <div className="flex flex-col gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 bg-blue-500/50 rounded px-2 py-1 text-xs font-mono">
+                            <Paperclip size={11} /> {filename}
+                          </span>
+                          {rest && <span className="whitespace-pre-wrap">{rest}</span>}
+                        </div>
+                      );
+                    }
+                    return <span className="whitespace-pre-wrap">{m.content}</span>;
+                  })() : renderMarkdown(m.content)}
+                </div>
+              )}
               {m.artifacts && m.artifacts.map((artifact, ai) => (
                 <div key={ai} className="max-w-[90%] mt-2 rounded-lg border border-gray-700">
                   {artifact.artifact_type === "chart" && (
@@ -780,98 +767,19 @@ export default function Page() {
         </div>
       </div>
 
-      <div className="flex flex-col w-80 shrink-0">
-        <div className="px-4 py-3 border-b border-gray-800 text-sm font-medium text-gray-400">Agent Activity</div>
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 font-mono">
-          {pendingActions.length > 0 && (
-            <div className="space-y-2">
-              {pendingActions.map((action) => (
-                <div key={action.action_id} className="border border-yellow-800/50 rounded-lg overflow-hidden bg-gray-900">
-                  <div className="px-3 pt-2.5 pb-2 border-b border-yellow-900/40">
-                    <p className="text-[10px] font-mono text-yellow-600 uppercase tracking-widest">{action.agent_name || "Awaiting Confirmation"}</p>
-                  </div>
-                  {action.details && Object.keys(action.details).length > 0 ? (
-                    <div className="px-3 py-2 space-y-1.5">
-                      {Object.entries(action.details).map(([k, v]) => (
-                        <div key={k} className="flex justify-between items-center">
-                          <span className="text-[10px] text-gray-500 font-mono capitalize">{k.replace(/_/g, " ")}</span>
-                          <span className="text-[11px] text-gray-200 font-mono">{String(v)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="px-3 py-2">
-                      <p className="text-xs text-gray-400 leading-relaxed">{action.summary}</p>
-                    </div>
-                  )}
-                  <div className="flex border-t border-yellow-900/40">
-                    <button
-                      className="flex-1 px-2 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors border-r border-yellow-900/40"
-                      onClick={() => cancel(action)}
-                      disabled={loading}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="flex-1 px-2 py-1.5 text-xs text-green-400 hover:bg-green-900/30 transition-colors"
-                      onClick={() => confirm(action)}
-                      disabled={loading}
-                    >
-                      Confirm
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {logs.length === 0 && pendingActions.length === 0 && (
-            <p className="text-xs text-gray-600">No activity yet.</p>
-          )}
-          {logs.map((log, i) => (
-            <div key={i} className="text-xs text-gray-400">
-              <span className="text-gray-600 mr-2">{log.timestamp}</span>
-              {log.content}
-            </div>
-          ))}
-          <div ref={logEndRef} />
-        </div>
-      </div>
+      <ActivitySidebar
+        logs={logs}
+        logEndRef={logEndRef}
+      />
       </div>
 
-      {historyOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
-          onClick={() => setHistoryOpen(false)}
-        >
-          <div
-            className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-96 max-h-[60vh] flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-              <span className="text-sm font-medium text-gray-300">Recently Closed</span>
-              <button className="text-gray-500 hover:text-gray-300" onClick={() => setHistoryOpen(false)}><X size={16} /></button>
-            </div>
-            <div className="overflow-y-auto py-1">
-              {closedTabs.map(tab => (
-                <div key={tab.id} className="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-800 group">
-                  <button
-                    className="flex-1 text-left text-sm text-gray-300 truncate"
-                    onClick={() => restoreTab(tab)}
-                  >
-                    {tab.label}
-                  </button>
-                  <button
-                    className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0 transition-colors"
-                    onClick={() => deleteClosedTab(tab.id)}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <HistoryModal
+        open={historyOpen}
+        closedTabs={closedTabs}
+        onClose={() => setHistoryOpen(false)}
+        onRestore={restoreTab}
+        onDelete={deleteClosedTab}
+      />
     </div>
   );
 }
