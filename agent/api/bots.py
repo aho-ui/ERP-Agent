@@ -51,57 +51,57 @@ async def _stop(bot_id: str):
     stop_tunnel(bot_id)
 
 
-async def list_bots(request):
-    _, _, err = await require_auth(request)
-    if err:
-        return err
-    rows = BotInstance.objects.order_by("created_at").values("id", "name", "platform", "role", "is_active")
-    results = [
-        {
-            "id": str(r["id"]),
-            "name": r["name"],
-            "platform": r["platform"],
-            "role": r["role"],
-            "is_active": r["is_active"],
-            "running": str(r["id"]) in _running_bots or (r["platform"] == BotInstance.Platform.WHATSAPP and r["is_active"]),
-            "webhook_url": get_tunnel(str(r["id"])),
-        }
-        async for r in rows
-    ]
-    return JsonResponse(results, safe=False)
-
-
 @csrf_exempt
-async def create_bot(request):
+async def bots(request):
     user_id, _, err = await require_auth(request)
     if err:
         return err
-    try:
-        body = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    name = body.get("name", "").strip()
-    platform = body.get("platform", "").strip()
-    token = body.get("token", "").strip()
-    role = body.get("role", BotInstance.Role.VIEWER).strip()
+    if request.method == "GET":
+        rows = BotInstance.objects.order_by("created_at").values("id", "name", "platform", "role", "is_active")
+        results = [
+            {
+                "id": str(r["id"]),
+                "name": r["name"],
+                "platform": r["platform"],
+                "role": r["role"],
+                "is_active": r["is_active"],
+                "running": str(r["id"]) in _running_bots or (r["platform"] == BotInstance.Platform.WHATSAPP and r["is_active"]),
+                "webhook_url": get_tunnel(str(r["id"])),
+            }
+            async for r in rows
+        ]
+        return JsonResponse(results, safe=False)
 
-    if not name or not platform or not token:
-        return JsonResponse({"error": "name, platform, and token are required"}, status=400)
-    if platform not in BotInstance.Platform.values:
-        return JsonResponse({"error": f"Invalid platform. Choose from: {BotInstance.Platform.values}"}, status=400)
-    if role not in BotInstance.Role.values:
-        return JsonResponse({"error": f"Invalid role. Choose from: {BotInstance.Role.values}"}, status=400)
+    if request.method == "POST":
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    bot = await BotInstance.objects.acreate(
-        name=name,
-        platform=platform,
-        token=token,
-        role=role,
-        is_active=False,
-        created_by_id=user_id,
-    )
-    return JsonResponse({"id": str(bot.id), "name": bot.name, "platform": bot.platform, "role": bot.role, "is_active": bot.is_active, "running": False})
+        name = body.get("name", "").strip()
+        platform = body.get("platform", "").strip()
+        token = body.get("token", "").strip()
+        role = body.get("role", BotInstance.Role.VIEWER).strip()
+
+        if not name or not platform or not token:
+            return JsonResponse({"error": "name, platform, and token are required"}, status=400)
+        if platform not in BotInstance.Platform.values:
+            return JsonResponse({"error": f"Invalid platform. Choose from: {BotInstance.Platform.values}"}, status=400)
+        if role not in BotInstance.Role.values:
+            return JsonResponse({"error": f"Invalid role. Choose from: {BotInstance.Role.values}"}, status=400)
+
+        bot = await BotInstance.objects.acreate(
+            name=name,
+            platform=platform,
+            token=token,
+            role=role,
+            is_active=False,
+            created_by_id=user_id,
+        )
+        return JsonResponse({"id": str(bot.id), "name": bot.name, "platform": bot.platform, "role": bot.role, "is_active": bot.is_active, "running": False})
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)
 
 
 @csrf_exempt

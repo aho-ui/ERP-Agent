@@ -275,7 +275,7 @@ class DispatchTool(Tool):
 
     @classmethod
     async def refresh(cls) -> None:
-        agents = await AgentRegistry.aavailable(_main()._healthy_servers)
+        agents = await AgentRegistry.aavailable(_main().healthy_servers())
         names = ", ".join(a["name"] for a in agents) or "none"
         cls._description = (
             "Route a task to a specialized domain agent. "
@@ -312,7 +312,7 @@ class DispatchTool(Tool):
         if status == "disabled":
             return f"Error: Agent '{agent_name}' is currently disabled."
         if status == "not_found":
-            available = [a["name"] for a in await AgentRegistry.aavailable(m._healthy_servers)]
+            available = [a["name"] for a in await AgentRegistry.aavailable(m.healthy_servers())]
             return f"Error: No agent named '{agent_name}'. Available: {available}"
 
         role = ctx.user_role

@@ -8,51 +8,40 @@ from agent.api.auth import require_auth
 from agent.models import ChatSession, ChatMessage
 
 
-async def list_sessions(request):
-    user_id, _, err = await require_auth(request)
-    if err:
-        return err
-    rows = ChatSession.objects.filter(user_id=user_id, is_closed=False).order_by("created_at").values(
-        "id", "label", "created_at"
-    )
-    results = [
-        {"id": str(r["id"]), "label": r["label"]}
-        async for r in rows
-    ]
-    return JsonResponse(results, safe=False)
-
-
-async def list_closed_sessions(request):
-    user_id, _, err = await require_auth(request)
-    if err:
-        return err
-    rows = ChatSession.objects.filter(user_id=user_id, is_closed=True).order_by("-updated_at").values(
-        "id", "label"
-    )
-    results = [
-        {"id": str(r["id"]), "label": r["label"]}
-        async for r in rows
-    ]
-    return JsonResponse(results, safe=False)
-
-
 @csrf_exempt
-async def create_session(request):
+async def sessions(request):
     user_id, _, err = await require_auth(request)
     if err:
         return err
-    try:
-        body = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    session_id = body.get("id") or str(uuid.uuid4())
-    label = body.get("label", "New Chat")
-    session, _ = await ChatSession.objects.aupdate_or_create(
-        id=session_id,
-        defaults={"user_id": user_id, "label": label, "is_closed": False},
-    )
-    return JsonResponse({"id": str(session.id), "label": session.label})
+    if request.method == "GET":
+        status = request.GET.get("status", "open")
+        is_closed = status == "closed"
+        order = "-updated_at" if is_closed else "created_at"
+        rows = ChatSession.objects.filter(user_id=user_id, is_closed=is_closed).order_by(order).values(
+            "id", "label"
+        )
+        results = [
+            {"id": str(r["id"]), "label": r["label"]}
+            async for r in rows
+        ]
+        return JsonResponse(results, safe=False)
+
+    if request.method == "POST":
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        session_id = body.get("id") or str(uuid.uuid4())
+        label = body.get("label", "New Chat")
+        session, _ = await ChatSession.objects.aupdate_or_create(
+            id=session_id,
+            defaults={"user_id": user_id, "label": label, "is_closed": False},
+        )
+        return JsonResponse({"id": str(session.id), "label": session.label})
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)
 
 
 @csrf_exempt

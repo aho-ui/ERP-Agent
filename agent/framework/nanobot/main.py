@@ -5,15 +5,16 @@ from dataclasses import dataclass, replace
 from loguru import logger
 from nanobot.agent.loop import AgentLoop
 from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import MCPServerConfig
-from MCP.config import SERVERS
-from MCP.utils.health import check_all as _check_mcp_health
+# from nanobot.config.schema import MCPServerConfig
+# from MCP.config import SERVERS
+# from MCP.utils.health import check_all as _check_mcp_health
+from agent.utils.mcp import SERVERS, healthy_servers
 from agent.framework.nanobot.config.loader import load
 from agent.framework.nanobot.agents.dispatch import DispatchTool
 
 _agent_loop: AgentLoop | None = None
 _task_queues: dict[int, asyncio.Queue] = {}
-_healthy_servers: set[str] = set()
+# _healthy_servers: set[str] = set()
 
 
 @dataclass
@@ -58,27 +59,26 @@ logger.add(_tool_call_sink, level="INFO", format="{message}")
 
 
 def get_agent_loop() -> AgentLoop:
-    global _agent_loop, _healthy_servers
+    global _agent_loop
     if _agent_loop is None:
         config, provider = load()
         bus = MessageBus()
         workspace = config.workspace_path
         workspace.mkdir(parents=True, exist_ok=True)
 
-        health = _check_mcp_health()
-        _healthy_servers = {name for name, ok in health.items() if ok}
-
-        mcp_servers = {
-            name: MCPServerConfig(**cfg)
-            for name, cfg in SERVERS.items()
-            if name in _healthy_servers
-        }
+        # health = _check_mcp_health()
+        # _healthy_servers = {name for name, ok in health.items() if ok}
+        # mcp_servers = {
+        #     name: MCPServerConfig(**cfg)
+        #     for name, cfg in SERVERS.items()
+        #     if name in _healthy_servers
+        # }
 
         _agent_loop = AgentLoop(
             bus=bus,
             provider=provider,
             workspace=workspace,
-            mcp_servers=mcp_servers,
+            mcp_servers=SERVERS,
         )
 
         dispatch_tool = DispatchTool(

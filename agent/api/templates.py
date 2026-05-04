@@ -57,14 +57,34 @@ async def agent_templates(request):
 
 @csrf_exempt
 async def agent_template_detail(request, template_id):
-    _, _, err = await require_auth(request, admin_only=True)
-    if err:
-        return err
+    if request.method == "GET":
+        _, _, err = await require_auth(request)
+        if err:
+            return err
+    else:
+        _, _, err = await require_auth(request, admin_only=True)
+        if err:
+            return err
 
     try:
         template = await AgentTemplate.objects.aget(id=template_id)
     except AgentTemplate.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse({
+            "id": str(template.id),
+            "name": template.name,
+            "type": template.type,
+            "description": template.description,
+            "instructions": template.instructions,
+            "system_prompt": template.instructions,
+            "allowed_tools": template.allowed_tools,
+            "is_active": template.is_active,
+            "is_default": template.is_default,
+            "builtin": template.is_default,
+            "created_at": template.created_at.isoformat(),
+        })
 
     if request.method == "PUT":
         body = json.loads(request.body)
@@ -78,6 +98,19 @@ async def agent_template_detail(request, template_id):
         await DispatchTool.refresh()
         return JsonResponse({"id": str(template.id), "name": template.name})
 
+    if request.method == "PATCH":
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        for field in ("name", "type", "description", "instructions", "allowed_tools", "is_active"):
+            if field in body:
+                setattr(template, field, body[field])
+        await template.asave()
+        AgentRegistry.invalidate()
+        await DispatchTool.refresh()
+        return JsonResponse({"id": str(template.id), "name": template.name, "is_active": template.is_active})
+
     if request.method == "DELETE":
         await template.adelete()
         AgentRegistry.invalidate()
@@ -87,49 +120,10 @@ async def agent_template_detail(request, template_id):
     return JsonResponse({"error": "Method not allowed"}, status=405)
 
 
-@csrf_exempt
-async def toggle_agent(request):
-    _, _, err = await require_auth(request, admin_only=True)
-    if err:
-        return err
-    try:
-        body = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    name = body.get("name", "").strip()
-    enabled = body.get("enabled", True)
-    if not name:
-        return JsonResponse({"error": "name is required"}, status=400)
-
-    # AGENTS = _get_agents()
-    # is_builtin = any(a["name"] == name for a in AGENTS)
-    # if is_builtin:
-    #     if not enabled:
-    #         await AgentTemplate.objects.aupdate_or_create(
-    #             name=name,
-    #             defaults={"type": "builtin_stub", "instructions": "", "allowed_tools": [], "is_active": False},
-    #         )
-    #     else:
-    #         await AgentTemplate.objects.filter(name=name, type="builtin_stub").adelete()
-    # else:
-    #     await AgentTemplate.objects.filter(name=name).aupdate(is_active=enabled)
-    updated = await AgentTemplate.objects.filter(name=name).aupdate(is_active=enabled)
-    if not updated:
-        return JsonResponse({"error": f"No agent named '{name}'"}, status=404)
-    AgentRegistry.invalidate()
-    await DispatchTool.refresh()
-    return JsonResponse({"name": name, "is_active": enabled})
-
-
 async def available_tools(request):
     _, _, err = await require_auth(request)
     if err:
         return err
-    # AGENTS = _get_agents()
-    # tools: set[str] = set()
-    # for a in AGENTS:
-    #     tools.update(a["allowed_tools"])
     tools: set[str] = set()
     for a in await AgentRegistry.aall():
         tools.update(a["allowed_tools"])

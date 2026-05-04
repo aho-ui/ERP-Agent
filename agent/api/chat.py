@@ -232,39 +232,6 @@ async def cancel_action(request, action_id):
     return JsonResponse({"status": "cancelled"})
 
 
-async def pending_actions(request):
-    _, _, err = await require_auth(request)
-    if err:
-        return err
-    rows = AgentAction.objects.filter(status=AgentAction.Status.PENDING).order_by("timestamp").values(
-        "id", "intent", "agent_name", "timestamp", "output"
-    )
-    results = [
-        {
-            "action_id": str(r["id"]),
-            "summary": r["output"].get("pending_summary", r["intent"]),
-            "details": r["output"].get("details", {}),
-            "agent_name": r["agent_name"],
-            "timestamp": r["timestamp"].isoformat(),
-        }
-        async for r in rows
-    ]
-    return JsonResponse(results, safe=False)
-
-
-async def action_status(request, action_id):
-    _, _, err = await require_auth(request)
-    if err:
-        return err
-    try:
-        action = await AgentAction.objects.aget(id=action_id)
-    except AgentAction.DoesNotExist:
-        return JsonResponse({"error": "Not found"}, status=404)
-    return JsonResponse({
-        "status": action.status,
-        "output": action.output,
-        "artifacts": action.artifacts,
-    })
-
-
+# pending_actions moved to agent/api/audit.py:actions(?status=pending)
+# action_status moved to agent/api/audit.py:action_detail
 # session_messages moved to agent/api/sessions.py
