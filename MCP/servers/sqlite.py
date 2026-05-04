@@ -14,14 +14,15 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
-def health() -> bool:
+@mcp.tool()
+def health() -> str:
     try:
         conn = get_conn()
         conn.execute("SELECT 1 FROM customers LIMIT 1")
         conn.close()
-        return True
-    except Exception:
-        return False
+        return json.dumps({"ok": True})
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)})
 
 
 
@@ -305,7 +306,8 @@ def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -
     return json.dumps({"invoice_id": invoice_id, "updated_fields": updated})
 
 
-def dashboard_stats() -> dict | None:
+@mcp.tool()
+def dashboard_stats() -> str:
     try:
         conn = get_conn()
         sales = conn.execute("SELECT COUNT(*) FROM sales_orders").fetchone()[0]
@@ -314,15 +316,15 @@ def dashboard_stats() -> dict | None:
         purchases = conn.execute("SELECT COUNT(*) FROM purchase_orders").fetchone()[0]
         invoices = conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
         conn.close()
-        return {
+        return json.dumps({
             "total_sales_orders": sales,
             "total_customers": customers,
             "total_products": products,
             "total_purchase_orders": purchases,
             "total_invoices": invoices,
-        }
+        })
     except Exception:
-        return None
+        return json.dumps({})
 
 
 if __name__ == "__main__":

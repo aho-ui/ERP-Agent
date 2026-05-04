@@ -15,12 +15,14 @@ async def _on_startup():
     from agent.framework.nanobot import main as agent_main
     from agent.framework.nanobot.agents.factory import seed_from_yaml
     from agent.framework.nanobot.agents.dispatch import DispatchTool
+    from agent.utils.mcp import health
 
     if await AgentTemplate.objects.acount() == 0:
         await sync_to_async(seed_from_yaml)(["odoo.yaml", "demo.yaml"])
 
     agent_loop = agent_main.get_agent_loop()
     await agent_loop._connect_mcp()
+    await health()
     await DispatchTool.refresh()
 
     async for bot in BotInstance.objects.filter(is_active=True):

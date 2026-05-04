@@ -20,12 +20,13 @@ def connect():
     return uid, models
 
 
-def health() -> bool:
+@mcp.tool()
+def health() -> str:
     try:
         connect()
-        return True
-    except Exception:
-        return False
+        return json.dumps({"ok": True})
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)})
 
 
 def execute(uid, models, model, method, args, kwargs=None):
@@ -250,7 +251,8 @@ def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -
     return json.dumps({"invoice_id": invoice_id, "updated_fields": list(updates.keys())})
 
 
-def dashboard_stats() -> dict | None:
+@mcp.tool()
+def dashboard_stats() -> str:
     try:
         uid, models = connect()
         open_sales = len(execute(uid, models, "sale.order", "search", [[["state", "in", ["draft", "sale"]]]], {"limit": 10000}))
@@ -258,15 +260,15 @@ def dashboard_stats() -> dict | None:
         total_products = len(execute(uid, models, "product.product", "search", [[["sale_ok", "=", True]]], {"limit": 10000}))
         open_purchase = len(execute(uid, models, "purchase.order", "search", [[["state", "in", ["draft", "purchase"]]]], {"limit": 10000}))
         unpaid_invoices = len(execute(uid, models, "account.move", "search", [[["move_type", "=", "out_invoice"], ["payment_state", "in", ["not_paid", "partial"]]]], {"limit": 10000}))
-        return {
+        return json.dumps({
             "open_sales_orders": open_sales,
             "total_customers": total_customers,
             "total_products": total_products,
             "open_purchase_orders": open_purchase,
             "unpaid_invoices": unpaid_invoices,
-        }
+        })
     except Exception:
-        return None
+        return json.dumps({})
 
 
 if __name__ == "__main__":

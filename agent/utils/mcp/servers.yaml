@@ -1,0 +1,24 @@
+- name: odoo
+  type: stdio
+  command: python
+  args: [MCP/servers/odoo.py]
+
+- name: sqlite
+  type: stdio
+  command: python
+  args: [MCP/servers/sqlite.py]
+
+# Examples for adding external/remote servers:
+#
+# - name: linear
+#   type: stdio
+#   command: npx
+#   args: [-y, "@modelcontextprotocol/server-linear"]
+#   env:
+#     LINEAR_API_KEY: ${LINEAR_API_KEY}
+#
+# - name: notion
+#   type: streamableHttp
+#   url: https://mcp-notion.internal
+#   headers:
+#     Authorization: Bearer ${NOTION_TOKEN}
