@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates>
+    <!-- OWL template for ErpAgentChat component -->
+    <!-- Mirrors frontend/app/page.tsx layout -->
+    <t t-name="erp_agent.ErpAgentChat">
+        <div class="o_erp_agent_chat">
+            <!-- message list -->
+            <!-- input box + send button -->
+            <!-- pending action confirmation card -->
+        </div>
+    </t>
+</templates>
