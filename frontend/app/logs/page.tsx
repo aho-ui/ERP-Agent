@@ -196,7 +196,7 @@ export default function LogsPage() {
     // if (localStorage.getItem("user_role") !== "admin") { router.replace("/"); return; }
     const role = localStorage.getItem("user_role");
     if (role !== "operator" && role !== "admin") { router.replace("/"); return; }
-    apiFetch<LogRow[]>(`${BACKEND}/api/agent/logs/`)
+    apiFetch<LogRow[]>(`${BACKEND}/api/agent/actions/`)
       .then(data => data && Array.isArray(data) ? setLogs(data) : {})
       .catch(() => {});
   }, [router]);
@@ -222,7 +222,7 @@ export default function LogsPage() {
           </div>
           <button
             onClick={() => {
-              fetch(`${BACKEND}/api/agent/logs/export/`, { headers: authHeader() })
+              fetch(`${BACKEND}/api/agent/actions/?format=csv`, { headers: authHeader() })
                 .then(r => r.blob())
                 .then(blob => {
                   const url = URL.createObjectURL(blob);

@@ -63,7 +63,7 @@ export default function AgentsPage() {
 
   async function fetchTools() {
     try {
-      const data = await apiFetch<string[]>(`${BACKEND}/api/agent/templates/tools/`);
+      const data = await apiFetch<string[]>(`${BACKEND}/api/agent/tools/`);
       if (data) setTools(data);
     } catch {}
   }
@@ -118,10 +118,11 @@ export default function AgentsPage() {
   }
 
   async function toggleActive(agent: AgentItem) {
+    if (!agent.id) return;
     setToggling(agent.name);
-    await apiFetch(`${BACKEND}/api/agent/templates/toggle/`, {
-      method: "POST",
-      body: JSON.stringify({ name: agent.name, enabled: !agent.is_active }),
+    await apiFetch(`${BACKEND}/api/agent/templates/${agent.id}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_active: !agent.is_active }),
     });
     await fetchAgents();
     setToggling(null);

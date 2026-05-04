@@ -63,7 +63,7 @@ export default function BotsPage() {
       : token.trim();
     if (!resolvedToken) return;
     setSaving(true);
-    const res = await apiFetch<Bot>(`${BACKEND}/api/agent/bots/create/`, {
+    const res = await apiFetch<Bot>(`${BACKEND}/api/agent/bots/`, {
       method: "POST",
       body: JSON.stringify({ name: name.trim(), platform, role, token: resolvedToken }),
     });

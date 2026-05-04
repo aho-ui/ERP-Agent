@@ -86,7 +86,7 @@ export default function Page() {
 
     Promise.all([
       apiFetch<{ id: string; label: string }[]>(`${BACKEND}/api/agent/sessions/`),
-      apiFetch<{ id: string; label: string }[]>(`${BACKEND}/api/agent/sessions/closed/`),
+      apiFetch<{ id: string; label: string }[]>(`${BACKEND}/api/agent/sessions/?status=closed`),
     ]).then(([open, closed]) => {
       if (!open || !closed) return;
       const openTabs = open.map(s => ({ id: s.id, label: s.label, messages: [] as Message[] }));
@@ -96,7 +96,7 @@ export default function Page() {
         setActiveTabId(openTabs[0].id);
       } else {
         const t = newTab();
-        apiFetch(`${BACKEND}/api/agent/sessions/create/`, {
+        apiFetch(`${BACKEND}/api/agent/sessions/`, {
           method: "POST",
           body: JSON.stringify({ id: t.id, label: t.label }),
         }).catch(() => {});
@@ -141,7 +141,7 @@ export default function Page() {
 
   function addTab() {
     const t = newTab();
-    apiFetch(`${BACKEND}/api/agent/sessions/create/`, {
+    apiFetch(`${BACKEND}/api/agent/sessions/`, {
       method: "POST",
       body: JSON.stringify({ id: t.id, label: t.label }),
     }).catch(() => {});
@@ -163,7 +163,7 @@ export default function Page() {
       const next = prev.filter(t => t.id !== id);
       if (next.length === 0) {
         const t = newTab();
-        apiFetch(`${BACKEND}/api/agent/sessions/create/`, {
+        apiFetch(`${BACKEND}/api/agent/sessions/`, {
           method: "POST",
           body: JSON.stringify({ id: t.id, label: t.label }),
         }).catch(() => {});
@@ -226,7 +226,7 @@ export default function Page() {
   useEffect(() => {
     async function fetchHealth() {
       try {
-        const data = await apiFetch<McpServer[]>(`${BACKEND}/api/agent/mcp/health/`);
+        const data = await apiFetch<McpServer[]>(`${BACKEND}/api/agent/mcp/?detail=status`);
         if (data) setMcpServers(data);
       } catch {}
     }
@@ -413,7 +413,7 @@ export default function Page() {
     setLogs([]);
     setPendingSteps([]);
 
-    const res = await fetch(`${BACKEND}/api/agent/confirm/${action.action_id}/`, {
+    const res = await fetch(`${BACKEND}/api/agent/actions/${action.action_id}/confirm/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ session_key: tabId }),
@@ -427,7 +427,7 @@ export default function Page() {
     const tabId = activeTabId;
     // setPendingActions((prev) => prev.filter((a) => a.action_id !== action.action_id));
     setPendingStatus(tabId, action.action_id, "cancelled");
-    await fetch(`${BACKEND}/api/agent/cancel/${action.action_id}/`, {
+    await fetch(`${BACKEND}/api/agent/actions/${action.action_id}/cancel/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ session_key: tabId }),

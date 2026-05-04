@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useApi, BACKEND } from "../lib/api";
 import { PendingActionCard } from "../components/PendingActionCard";
 import type { PendingAction } from "../lib/types";
@@ -246,16 +246,26 @@ export default function DashboardPage() {
   const [dateFrom, setDateFrom] = useState<string>("");
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadPending = useCallback(async () => {
-    const rows = await apiFetch<PendingAction[]>(`${BACKEND}/api/agent/pending/`);
-    if (Array.isArray(rows)) setPending(rows);
+    type RawAction = { id: string; intent: string; agent_name: string; timestamp: string; output: Record<string, unknown> };
+    const rows = await apiFetch<RawAction[]>(`${BACKEND}/api/agent/actions/?status=pending`);
+    if (Array.isArray(rows)) {
+      setPending(rows.map(r => ({
+        action_id: r.id,
+        summary: (r.output?.pending_summary as string) || r.intent,
+        details: (r.output?.details as Record<string, unknown>) || {},
+        agent_name: r.agent_name,
+        timestamp: r.timestamp,
+      })));
+    }
   }, [apiFetch]);
 
   async function confirmPending(action: PendingAction) {
     setPendingLoading(true);
     setPending((prev) => prev.filter((a) => a.action_id !== action.action_id));
-    await fetch(`${BACKEND}/api/agent/confirm/${action.action_id}/`, {
+    await fetch(`${BACKEND}/api/agent/actions/${action.action_id}/confirm/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ session_key: "" }),
@@ -266,7 +276,7 @@ export default function DashboardPage() {
 
   async function cancelPending(action: PendingAction) {
     setPending((prev) => prev.filter((a) => a.action_id !== action.action_id));
-    await fetch(`${BACKEND}/api/agent/cancel/${action.action_id}/`, {
+    await fetch(`${BACKEND}/api/agent/actions/${action.action_id}/cancel/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ session_key: "" }),
@@ -283,10 +293,22 @@ export default function DashboardPage() {
 
   const loadCalls = useCallback(async (mcp: string) => {
     if (loadedTabs.has(mcp)) return;
-    const rows = await apiFetch<CallRecord[]>(`${BACKEND}/api/agent/dashboard/calls/?mcp=${mcp}${filterParams()}`);
+    const rows = await apiFetch<CallRecord[]>(`${BACKEND}/api/agent/actions/?mcp=${mcp}${filterParams()}`);
     setCallsCache((prev) => ({ ...prev, [mcp]: Array.isArray(rows) ? rows : [] }));
     setLoadedTabs((prev) => new Set([...prev, mcp]));
   }, [loadedTabs, source, dateFrom]);
+
+  type McpResponse = { name: string; status: string; stats: Record<string, number> | null };
+
+  async function loadDashboard(params: string) {
+    const [calls, mcpRows] = await Promise.all([
+      apiFetch<{ agent_calls: Record<string, AgentCallGroup> }>(`${BACKEND}/api/agent/dashboard/${params}`),
+      apiFetch<McpResponse[]>(`${BACKEND}/api/agent/mcp/?detail=full`),
+    ]);
+    if (!calls) return null;
+    const mcps = (mcpRows || []).map(m => ({ name: m.name, healthy: m.status === "ok", stats: m.stats }));
+    return { mcps, agent_calls: calls.agent_calls } as DashboardData;
+  }
 
   function reloadAll(newSource = source, newDateFrom = dateFrom) {
     setCallsCache({});
@@ -295,7 +317,7 @@ export default function DashboardPage() {
     if (newSource !== "all") p.set("source", newSource);
     if (newDateFrom) p.set("date_from", newDateFrom);
     const params = p.toString() ? `?${p.toString()}` : "";
-    apiFetch<DashboardData>(`${BACKEND}/api/agent/dashboard/${params}`)
+    loadDashboard(params)
       .then((d) => {
         if (!d || !d.mcps) return;
         setData(d);
@@ -303,10 +325,20 @@ export default function DashboardPage() {
       .catch(() => {});
   }
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await fetch(`${BACKEND}/api/agent/mcp/`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeader() } });
+      reloadAll(source, dateFrom);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   useEffect(() => {
     if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     // if (localStorage.getItem("user_role") !== "admin") { router.replace("/"); return; }
-    apiFetch<DashboardData>(`${BACKEND}/api/agent/dashboard/`)
+    loadDashboard("")
       .then((d) => {
         if (!d || !d.mcps) return;
         setData(d);
@@ -358,6 +390,12 @@ export default function DashboardPage() {
               />
             </button>
           ))}
+          <div className="mt-auto pt-3 border-t border-gray-800 mx-1">
+            <button onClick={handleRefresh} disabled={refreshing} className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-gray-500 hover:text-gray-300 hover:bg-gray-900 transition-colors disabled:opacity-40">
+              <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+              {refreshing ? "Refreshing..." : "Refresh health"}
+            </button>
+          </div>
         </aside>
 
         <main className="flex-1 overflow-y-auto px-8 py-6">
