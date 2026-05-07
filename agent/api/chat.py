@@ -18,7 +18,11 @@ from agent.utils.streaming import stream_queue
 from agent.utils.queue import CollectingQueue
 
 
+SESSION_PREFIXES = ("odoo:",)
+
 async def _save_message(session_id: str, user_id, role, content: str, artifacts: list = None, steps: list = None):
+    if any(session_id.startswith(p) for p in SESSION_PREFIXES):
+        return
     try:
         session = await ChatSession.objects.aget(id=session_id)
         await ChatMessage.objects.acreate(
