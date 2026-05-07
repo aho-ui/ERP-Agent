@@ -1,0 +1,22 @@
+{
+    "name": "ERP Agent",
+    "version": "1.0.0",
+    "summary": "AI Assistant",
+    "installable": True,
+    "application": True,
+    "depends": ["web"],
+    "assets": {
+        "web.assets_backend": [
+            "erp_agent/static/src/test/agent.js",
+            "erp_agent/static/src/components/AgentSettings/AgentSettings.js",
+            "erp_agent/static/src/components/AgentSettings/AgentSettings.xml",
+            "erp_agent/static/src/components/AgentSettings/AgentSettings.scss",
+            "erp_agent/static/src/components/ErpAgentChat/ErpAgentChat.js",
+            "erp_agent/static/src/components/ErpAgentChat/ErpAgentChat.xml",
+            "erp_agent/static/src/components/ErpAgentChat/ErpAgentChat.scss",
+            "erp_agent/static/src/components/AgentWidget/AgentWidget.js",
+            "erp_agent/static/src/components/AgentWidget/AgentWidget.xml",
+            "erp_agent/static/src/components/AgentWidget/AgentWidget.scss",
+        ],
+    },
+}

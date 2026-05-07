@@ -1,0 +1,234 @@
+.o_erp_chat {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    cursor: default;
+
+    .o_erp_chat_header {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 8px 12px;
+        border-bottom: 1px solid #e0e0e0;
+        position: relative;
+        flex-shrink: 0;
+    }
+
+    .o_erp_chat_conv_trigger {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: #333;
+        padding: 4px 6px;
+        border-radius: 6px;
+        text-align: left;
+        overflow: hidden;
+
+        span:first-child {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        &:hover {
+            background: #f5f5f5;
+        }
+    }
+
+    .o_erp_chat_chevron {
+        font-size: 16px;
+        color: #888;
+        flex-shrink: 0;
+    }
+
+    .o_erp_chat_new_btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 20px;
+        color: #714B67;
+        padding: 2px 6px;
+        border-radius: 6px;
+        line-height: 1;
+        flex-shrink: 0;
+
+        &:hover {
+            background: #f5f5f5;
+        }
+    }
+
+    .o_erp_chat_dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 10;
+        overflow: hidden;
+    }
+
+    .o_erp_chat_dropdown_item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        font-size: 13px;
+        cursor: pointer;
+
+        span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+
+        &:hover {
+            background: #f5f5f5;
+        }
+
+        &.is-active {
+            background: #f0e8ef;
+            color: #714B67;
+            font-weight: 600;
+        }
+    }
+
+    .o_erp_chat_delete_btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #aaa;
+        padding: 2px 4px;
+        border-radius: 4px;
+        flex-shrink: 0;
+        line-height: 1;
+
+        &:hover {
+            color: #c00;
+        }
+    }
+
+    .o_erp_chat_messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .o_erp_chat_message {
+        padding: 8px 12px;
+        border-radius: 8px;
+        max-width: 80%;
+        word-wrap: break-word;
+
+        &.is-user {
+            background: #714B67;
+            color: white;
+            align-self: flex-end;
+        }
+
+        &.is-assistant {
+            background: #f5f5f5;
+            color: #333;
+            align-self: flex-start;
+        }
+
+        &.is-thinking {
+            background: #f0f0f0;
+            color: #888;
+            align-self: flex-start;
+            font-style: italic;
+        }
+
+        &.is-error {
+            background: #fdecea;
+            color: #c00;
+            align-self: flex-start;
+        }
+
+        &.is-table {
+            max-width: 95%;
+            padding: 8px;
+            background: white;
+            border: 1px solid #e0e0e0;
+        }
+    }
+
+    .o_erp_chat_table_header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #714B67;
+    }
+
+    .o_erp_chat_table_download {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #714B67;
+        padding: 2px 4px;
+        border-radius: 4px;
+        line-height: 1;
+        flex-shrink: 0;
+
+        &:hover {
+            background: #f0e8ef;
+        }
+    }
+
+    .o_erp_chat_table_scroll {
+        overflow-x: auto;
+    }
+
+    .o_erp_chat_input_bar {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        padding: 12px;
+        border-top: 1px solid #e0e0e0;
+    }
+
+    .o_erp_chat_input {
+        flex: 1;
+        resize: none;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 14px;
+        outline: none;
+        font-family: inherit;
+
+        &:focus {
+            border-color: #714B67;
+        }
+    }
+
+    .o_erp_chat_send {
+        background: #714B67;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 16px;
+
+        &:hover {
+            background: #5a3a54;
+        }
+    }
+}

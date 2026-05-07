@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates>
+    <t t-name="erp_agent.AgentWidget">
+        <t t-if="showPanel">
+            <div t-att-style="panelStyle">
+                <t t-if="state.view === 'chat'">
+                    <ErpAgentChat openSettings="() => this.state.view = 'settings'"/>
+                </t>
+                <t t-else="">
+                    <AgentSettings onBack="() => this.state.view = 'chat'"/>
+                </t>
+                <div class="o_agent_resize_handle"
+                     t-att-class="{'is-left': bubbleOnRight}"
+                     t-on-mousedown="onResizeDown"/>
+            </div>
+        </t>
+        <div class="o_agent_widget"
+             t-att-class="{'is-dragging': state.dragging}"
+             t-att-style="posStyle"
+             t-on-mousedown="onMouseDown">
+            <i class="fa fa-comments" style="color:white;font-size:20px;"/>
+        </div>
+    </t>
+</templates>

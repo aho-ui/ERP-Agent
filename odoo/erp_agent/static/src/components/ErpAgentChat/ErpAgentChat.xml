@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates>
+    <t t-name="erp_agent.ErpAgentChat">
+        <div class="o_erp_chat">
+            <div class="o_erp_chat_header">
+                <button class="o_erp_chat_conv_trigger" t-on-click="toggleDropdown">
+                    <span t-esc="activeConv.name"/>
+                    <i class="fa fa-chevron-down o_erp_chat_chevron"/>
+                </button>
+                <button class="o_erp_chat_new_btn" t-on-click="newConv" title="New conversation">
+                    <i class="fa fa-plus"/>
+                </button>
+                <button class="o_erp_chat_new_btn" t-on-click="props.openSettings" title="Settings">
+                    <i class="fa fa-cog"/>
+                </button>
+                <div t-if="state.showDropdown" class="o_erp_chat_dropdown">
+                    <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
+                        <div class="o_erp_chat_dropdown_item"
+                             t-att-class="{'is-active': conv.id === state.activeId}"
+                             t-on-click="() => this.switchConv(conv.id)">
+                            <span t-esc="conv.name"/>
+                            <button class="o_erp_chat_delete_btn"
+                                    t-on-click.stop="() => this.deleteConv(conv.id)">
+                                <i class="fa fa-trash"/>
+                            </button>
+                        </div>
+                    </t>
+                </div>
+            </div>
+            <div class="o_erp_chat_messages">
+                <t t-foreach="messages" t-as="msg" t-key="msg_index">
+                    <div class="o_erp_chat_message" t-att-class="'is-' + msg.role + (msg.type === 'table' ? ' is-table' : '')">
+                        <t t-if="msg.type === 'table'">
+                            <div class="o_erp_chat_table_header">
+                                <span t-esc="msg.title"/>
+                                <button class="o_erp_chat_table_download" t-on-click="() => this.downloadTable(msg)" title="Download CSV">
+                                    <i class="fa fa-download"/>
+                                </button>
+                            </div>
+                            <div class="o_erp_chat_table_scroll">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <t t-foreach="msg.columns" t-as="col" t-key="col_index">
+                                                <th t-esc="col"/>
+                                            </t>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="msg.rows" t-as="row" t-key="row_index">
+                                            <tr>
+                                                <t t-foreach="row" t-as="cell" t-key="cell_index">
+                                                    <td t-esc="cell"/>
+                                                </t>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </t>
+                        <span t-else="" t-esc="msg.text"/>
+                    </div>
+                </t>
+                <div t-if="state.loading" class="o_erp_chat_message is-thinking">
+                    <span>...</span>
+                </div>
+            </div>
+            <div class="o_erp_chat_input_bar">
+                <textarea
+                    class="o_erp_chat_input"
+                    placeholder="Type a message..."
+                    t-model="state.input"
+                    t-on-keydown="onKeydown"
+                    rows="1"/>
+                <button class="o_erp_chat_send" t-on-click="onSend">
+                    <i class="fa fa-paper-plane"/>
+                </button>
+            </div>
+        </div>
+    </t>
+</templates>

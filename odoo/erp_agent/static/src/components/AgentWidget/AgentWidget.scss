@@ -1,0 +1,35 @@
+.o_agent_widget {
+    cursor: grab;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
+    &:hover:not(.is-dragging) {
+        transform: scale(1.1);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    &.is-dragging {
+        cursor: grabbing;
+    }
+}
+
+.o_agent_resize_handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 18px;
+    height: 18px;
+    cursor: se-resize;
+    background: linear-gradient(135deg, transparent 40%, #d0d0d0 40%, #d0d0d0 55%, transparent 55%,
+                                        transparent 65%, #d0d0d0 65%, #d0d0d0 80%, transparent 80%);
+    border-radius: 0 0 12px 0;
+
+    &.is-left {
+        right: auto;
+        left: 0;
+        cursor: sw-resize;
+        background: linear-gradient(225deg, transparent 40%, #d0d0d0 40%, #d0d0d0 55%, transparent 55%,
+                                            transparent 65%, #d0d0d0 65%, #d0d0d0 80%, transparent 80%);
+        border-radius: 0 0 0 12px;
+    }
+}

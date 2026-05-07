@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates>
+    <t t-name="erp_agent.AgentSettings">
+        <div class="o_agent_settings">
+            <div class="o_agent_settings_header">
+                <button class="o_agent_settings_back" t-on-click="props.onBack">
+                    <i class="fa fa-arrow-left"/>
+                </button>
+                <span>Settings</span>
+            </div>
+            <div class="o_agent_settings_body">
+                <div class="o_agent_settings_field">
+                    <label>Backend URL</label>
+                    <input type="text"
+                           placeholder="http://localhost:8000"
+                           t-model="state.url"/>
+                </div>
+                <div class="o_agent_settings_field">
+                    <label>API Key</label>
+                    <input type="password"
+                           placeholder="sk-..."
+                           t-model="state.apiKey"/>
+                </div>
+                <button class="o_agent_settings_save" t-on-click="onSave">Save</button>
+            </div>
+        </div>
+    </t>
+</templates>
