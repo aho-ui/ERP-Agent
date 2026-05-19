@@ -1,0 +1,10 @@
+django
+django-cors-headers
+uvicorn
+loguru
+nanobot-ai==0.1.4.post5
+litellm
+python-dotenv
+pyyaml
+aiohttp
+json-repair

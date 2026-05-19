@@ -1,0 +1,54 @@
+from typing import NamedTuple
+
+import json_repair
+from loguru import logger
+
+
+class ParseResult(NamedTuple):
+    summary: str
+    artifacts: list
+
+
+def parse_agent_response(raw: str, agent_name: str, task: str, q, fallback: str) -> ParseResult:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+    try:
+        parsed = json_repair.loads(text)
+        if not isinstance(parsed, dict):
+            logger.warning(f"[{agent_name}] response not a dict after parse, skipping artifact")
+            return ParseResult(summary=fallback, artifacts=[])
+
+        summary = parsed.get("summary", fallback)
+        collected: list = []
+
+        chart_spec = parsed.get("chart")
+        if chart_spec and isinstance(chart_spec, dict):
+            artifact = {
+                "artifact_type": "chart",
+                "chart_type": chart_spec.get("type", "bar"),
+                "title": chart_spec.get("title", ""),
+                "x_key": chart_spec.get("x_key", ""),
+                "series": chart_spec.get("series", []),
+                "data": chart_spec.get("data", []),
+            }
+            collected.append(artifact)
+            if q:
+                q.put_nowait({"type": "artifact", **artifact})
+
+        records = parsed.get("records")
+        if records and isinstance(records, list) and len(records) > 0:
+            columns = list(records[0].keys())
+            rows = [list(r.values()) for r in records]
+            title = parsed.get("title", parsed.get("summary", "export"))[:60]
+            artifact = {"artifact_type": "table", "columns": columns, "rows": rows, "title": title}
+            collected.append(artifact)
+            logger.info(f"[{agent_name}] emitting table artifact: {len(rows)} rows")
+            if q:
+                q.put_nowait({"type": "artifact", **artifact})
+
+        return ParseResult(summary=summary, artifacts=collected)
+    except Exception as e:
+        logger.warning(f"[{agent_name}] artifact parse failed: {e}")
+        return ParseResult(summary=fallback, artifacts=[])

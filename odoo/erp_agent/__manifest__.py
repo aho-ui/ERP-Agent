@@ -5,9 +5,27 @@
     "installable": True,
     "application": True,
     "depends": ["web"],
+    "external_dependencies": {
+        "python": [
+            "django",
+            "corsheaders",
+            "uvicorn",
+            "loguru",
+            "nanobot",
+            "litellm",
+            "dotenv",
+            "yaml",
+            "aiohttp",
+            "json_repair",
+        ],
+    },
+    # "post_load": "erp_agent.server.start",
+    "post_load": "start",
     "assets": {
         "web.assets_backend": [
             "erp_agent/static/src/test/agent.js",
+            "erp_agent/static/src/lib/marked.min.js",
+            "erp_agent/static/src/lib/purify.min.js",
             "erp_agent/static/src/components/AgentSettings/AgentSettings.js",
             "erp_agent/static/src/components/AgentSettings/AgentSettings.xml",
             "erp_agent/static/src/components/AgentSettings/AgentSettings.scss",
