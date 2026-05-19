@@ -10,7 +10,7 @@
                 <button class="o_erp_chat_new_btn" t-on-click="newConv" title="New conversation">
                     <i class="fa fa-plus"/>
                 </button>
-                <button class="o_erp_chat_new_btn" t-on-click="props.openSettings" title="Settings">
+                <button class="o_erp_chat_new_btn" t-on-click="props.onSettings" title="Settings">
                     <i class="fa fa-cog"/>
                 </button>
                 <div t-if="state.showDropdown" class="o_erp_chat_dropdown">
@@ -58,7 +58,7 @@
                                 </table>
                             </div>
                         </t>
-                        <span t-else="" t-esc="msg.text"/>
+                        <span t-else="" t-out="formatText(msg.text)"/>
                     </div>
                 </t>
                 <div t-if="state.loading" class="o_erp_chat_message is-thinking">

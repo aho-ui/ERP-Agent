@@ -17,6 +17,7 @@ class AgentWidget extends Component {
             view: "chat",
             panelW: 320,
             panelH: 480,
+            activeProfileId: localStorage.getItem("erp_agent_profile") || "",
         });
         this._drag = { startX: 0, startY: 0, origX: 0, origY: 0 };
         this._resize = { active: false, startX: 0, startY: 0, origW: 0, origH: 0 };
@@ -53,11 +54,35 @@ class AgentWidget extends Component {
         onMounted(() => {
             document.addEventListener("mousemove", this._onMouseMove);
             document.addEventListener("mouseup", this._onMouseUp);
+            this._warmProfileCache();
         });
         onWillUnmount(() => {
             document.removeEventListener("mousemove", this._onMouseMove);
             document.removeEventListener("mouseup", this._onMouseUp);
         });
+    }
+
+    async _warmProfileCache() {
+        // hit the Odoo controller once so it loads profiles from the DB into
+        // the shared backend cache — the daemon chat path reads that cache.
+        try {
+            await fetch("/erp_agent/profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ jsonrpc: "2.0", method: "call", params: { action: "list" } }),
+            });
+        } catch (e) {
+            // best effort; Settings panel will warm it again on open
+        }
+    }
+
+    selectProfile(id) {
+        this.state.activeProfileId = id || "";
+        if (id) {
+            localStorage.setItem("erp_agent_profile", id);
+        } else {
+            localStorage.removeItem("erp_agent_profile");
+        }
     }
 
     get bubbleOnRight() {

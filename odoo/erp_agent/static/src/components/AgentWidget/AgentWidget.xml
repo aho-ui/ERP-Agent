@@ -3,11 +3,14 @@
     <t t-name="erp_agent.AgentWidget">
         <t t-if="showPanel">
             <div t-att-style="panelStyle">
-                <t t-if="state.view === 'chat'">
-                    <ErpAgentChat openSettings="() => this.state.view = 'settings'"/>
+                <t t-if="state.view === 'settings'">
+                    <AgentSettings onBack="() => { state.view = 'chat'; }"
+                                   profileId="state.activeProfileId"
+                                   onSelectProfile="(id) => this.selectProfile(id)"/>
                 </t>
                 <t t-else="">
-                    <AgentSettings onBack="() => this.state.view = 'chat'"/>
+                    <ErpAgentChat onSettings="() => { state.view = 'settings'; }"
+                                  profileId="state.activeProfileId"/>
                 </t>
                 <div class="o_agent_resize_handle"
                      t-att-class="{'is-left': bubbleOnRight}"

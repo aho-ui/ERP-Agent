@@ -32,8 +32,144 @@
     .o_agent_settings_body {
         display: flex;
         flex-direction: column;
-        gap: 20px;
-        padding: 24px 16px;
+        gap: 12px;
+        padding: 16px;
+        flex: 1;
+        overflow: hidden;
+        min-height: 0;
+    }
+
+    .o_agent_settings_status {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        font-weight: 600;
+        color: #555;
+    }
+
+    .o_agent_status_badge {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 999px;
+
+        &.is-running {
+            background: #d4edda;
+            color: #155724;
+        }
+        &.is-stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    }
+
+    .o_agent_settings_field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #555;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        select, input {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 12px;
+            font-family: inherit;
+            outline: none;
+            background: white;
+
+            &:focus { border-color: #714B67; }
+        }
+    }
+
+    .o_agent_profile_row {
+        display: flex;
+        gap: 6px;
+
+        select { flex: 1; }
+
+        .o_agent_profile_refresh {
+            border: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 6px;
+            padding: 0 10px;
+            cursor: pointer;
+            color: #555;
+
+            &:hover { background: #f5f5f5; }
+        }
+    }
+
+    .o_agent_settings_hint {
+        font-size: 10px;
+        font-weight: 400;
+        color: #888;
+    }
+
+    .o_agent_settings_error {
+        font-size: 12px;
+        color: #721c24;
+        background: #f8d7da;
+        padding: 6px 8px;
+        border-radius: 6px;
+        margin: 0;
+    }
+
+    .o_agent_settings_log_label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #555;
+    }
+
+    .o_agent_settings_log {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        background: #1e1e1e;
+        border-radius: 8px;
+        padding: 8px;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.4;
+        color: #d4d4d4;
+    }
+
+    .o_agent_log_line {
+        display: flex;
+        gap: 6px;
+        padding: 1px 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+
+        &.is-error { color: #f48771; }
+        &.is-warning { color: #dcdcaa; }
+        &.is-info { color: #9cdcfe; }
+        &.is-debug { color: #808080; }
+    }
+
+    .o_agent_log_time {
+        color: #6a9955;
+        flex-shrink: 0;
+    }
+
+    .o_agent_log_level {
+        font-weight: 600;
+        flex-shrink: 0;
+        min-width: 44px;
+    }
+
+    .o_agent_log_empty {
+        color: #888;
+        font-style: italic;
     }
 
     .o_agent_settings_field {
@@ -71,5 +207,40 @@
         margin-top: 4px;
 
         &:hover { background: #5a3a54; }
+    }
+
+    .o_agent_settings_actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+
+        button {
+            flex: 1;
+            min-width: 70px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 6px;
+            padding: 7px 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #555;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+
+            &:hover:not(:disabled) { background: #f5f5f5; }
+            &:disabled { opacity: 0.5; cursor: not-allowed; }
+            &.is-danger { color: #c0392b; }
+            &.o_agent_settings_save {
+                color: white;
+                background: #714B67;
+                border-color: #714B67;
+                margin-top: 0;
+
+                &:hover:not(:disabled) { background: #5a3a54; }
+            }
+        }
     }
 }

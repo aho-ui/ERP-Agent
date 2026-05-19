@@ -8,20 +8,103 @@
                 </button>
                 <span>Settings</span>
             </div>
+
             <div class="o_agent_settings_body">
-                <div class="o_agent_settings_field">
-                    <label>Backend URL</label>
-                    <input type="text"
-                           placeholder="http://localhost:8000"
-                           t-model="state.url"/>
-                </div>
-                <div class="o_agent_settings_field">
-                    <label>API Key</label>
-                    <input type="password"
-                           placeholder="sk-..."
-                           t-model="state.apiKey"/>
-                </div>
-                <button class="o_agent_settings_save" t-on-click="onSave">Save</button>
+
+                <t t-if="state.mode === 'list'">
+                    <div class="o_agent_settings_field">
+                        <label>Profile</label>
+                        <div class="o_agent_profile_row">
+                            <select t-att-value="props.profileId" t-on-change="onSelect">
+                                <option value="">-- none --</option>
+                                <t t-foreach="state.profiles" t-as="p" t-key="p.id">
+                                    <option t-att-value="p.id"
+                                            t-att-selected="p.id === props.profileId">
+                                        <t t-esc="p.name"/> (<t t-esc="p.model"/>)
+                                    </option>
+                                </t>
+                            </select>
+                            <button class="o_agent_profile_refresh"
+                                    t-on-click="onRefresh"
+                                    title="Refresh list">
+                                <i class="fa fa-refresh"/>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="o_agent_settings_actions">
+                        <button t-on-click="toggleLogs">
+                            <i class="fa fa-terminal"/> Logs
+                        </button>
+                        <button t-on-click="openCreate">
+                            <i class="fa fa-plus"/> Create
+                        </button>
+                        <button t-on-click="openEdit" t-att-disabled="!currentProfile">
+                            <i class="fa fa-pencil"/> Edit
+                        </button>
+                        <button t-on-click="onDelete"
+                                t-att-disabled="!currentProfile or state.busy"
+                                class="is-danger">
+                            <i class="fa fa-trash"/> Delete
+                        </button>
+                    </div>
+                </t>
+
+                <t t-if="state.mode === 'form'">
+                    <div class="o_agent_settings_field">
+                        <label>Name</label>
+                        <input type="text" t-model="state.form.name" placeholder="My profile"/>
+                    </div>
+                    <div class="o_agent_settings_field">
+                        <label>Model</label>
+                        <select t-model="state.form.model">
+                            <option value="">-- select --</option>
+                            <t t-foreach="state.models" t-as="m" t-key="m">
+                                <option t-att-value="m" t-esc="m"/>
+                            </t>
+                        </select>
+                    </div>
+                    <div class="o_agent_settings_field">
+                        <label>
+                            API Key
+                            <span t-if="state.formMode === 'edit'" class="o_agent_settings_hint">
+                                (leave blank to keep)
+                            </span>
+                        </label>
+                        <input type="password" t-model="state.form.apiKey" placeholder="sk-..."/>
+                    </div>
+                    <div class="o_agent_settings_actions">
+                        <button class="o_agent_settings_save"
+                                t-on-click="onSave"
+                                t-att-disabled="state.busy">
+                            <t t-if="state.busy">Saving...</t>
+                            <t t-else="">Save</t>
+                        </button>
+                        <button t-on-click="cancelForm">Cancel</button>
+                    </div>
+                </t>
+
+                <p t-if="state.error" class="o_agent_settings_error" t-esc="state.error"/>
+
+                <t t-if="state.showLogs">
+                    <div class="o_agent_settings_status">
+                        <span>Backend</span>
+                        <span t-att-class="'o_agent_status_badge ' + (state.running ? 'is-running' : 'is-stopped')">
+                            <t t-if="state.running">Running</t>
+                            <t t-else="">Stopped</t>
+                        </span>
+                    </div>
+                    <div class="o_agent_settings_log">
+                        <t t-foreach="state.logs" t-as="line" t-key="line_index">
+                            <div t-att-class="'o_agent_log_line is-' + line.level.toLowerCase()">
+                                <span class="o_agent_log_time" t-esc="line.time"/>
+                                <span class="o_agent_log_level" t-esc="line.level"/>
+                                <span class="o_agent_log_msg" t-esc="line.message"/>
+                            </div>
+                        </t>
+                        <div t-if="!state.logs.length" class="o_agent_log_empty">No logs yet.</div>
+                    </div>
+                </t>
             </div>
         </div>
     </t>

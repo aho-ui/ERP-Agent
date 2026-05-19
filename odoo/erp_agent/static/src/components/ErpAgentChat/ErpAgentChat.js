@@ -1,10 +1,11 @@
 /** @odoo-module **/
-import { Component, useState } from "@odoo/owl";
-import { DEFAULT_URL, DEFAULT_API_KEY } from "../../test/agent";
+import { Component, useState, markup } from "@odoo/owl";
+
+const BACKEND_URL = "http://localhost:8001/";
 
 export class ErpAgentChat extends Component {
     static template = "erp_agent.ErpAgentChat";
-    static props = { openSettings: Function };
+    static props = { onSettings: Function, profileId: { type: String, optional: true } };
 
     setup() {
         this.state = useState({
@@ -23,13 +24,6 @@ export class ErpAgentChat extends Component {
 
     get messages() {
         return this.activeConv ? this.activeConv.messages : [];
-    }
-
-    _getSettings() {
-        return {
-            url: localStorage.getItem("erp_agent_url") || DEFAULT_URL,
-            apiKey: localStorage.getItem("erp_agent_api_key") || DEFAULT_API_KEY,
-        };
     }
 
     switchConv(id) {
@@ -66,12 +60,15 @@ export class ErpAgentChat extends Component {
         this.activeConv.messages.push({ text, role: "user" });
         this.state.input = "";
         this.state.loading = true;
-        const { url, apiKey } = this._getSettings();
         try {
-            const resp = await fetch(`${url}api/agent/chat/`, {
+            const resp = await fetch(`${BACKEND_URL}chat/`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-                body: JSON.stringify({ message: text, session_key: `odoo:${this.state.activeId}` }),
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    message: text,
+                    session_key: `odoo:${this.state.activeId}`,
+                    profile_id: this.props.profileId || "",
+                }),
             });
             if (!resp.ok) throw new Error(`${resp.status}`);
             const reader = resp.body.getReader();
@@ -120,6 +117,23 @@ export class ErpAgentChat extends Component {
         a.download = `${msg.title || "export"}.csv`;
         a.click();
         URL.revokeObjectURL(url);
+    }
+
+    formatText(text) {
+        const raw = String(text ?? "");
+        // full markdown via vendored marked + DOMPurify (static/src/lib).
+        // try/catch → if a lib failed to load, degrade to escaped plain text.
+        try {
+            const dirty = window.marked.parse(raw, { breaks: true });
+            return markup(window.DOMPurify.sanitize(dirty));
+        } catch (e) {
+            const esc = raw
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\n/g, "<br/>");
+            return markup(esc);
+        }
     }
 
     onKeydown(e) {
