@@ -4,7 +4,7 @@
         <div class="o_erp_chat">
             <div class="o_erp_chat_header">
                 <button class="o_erp_chat_conv_trigger" t-on-click="toggleDropdown">
-                    <span t-esc="activeConv.name"/>
+                    <span t-esc="activeConv ? activeConv.name : 'Loading...'"/>
                     <i class="fa fa-chevron-down o_erp_chat_chevron"/>
                 </button>
                 <button class="o_erp_chat_new_btn" t-on-click="newConv" title="New conversation">
@@ -20,6 +20,10 @@
                              t-on-click="() => this.switchConv(conv.id)">
                             <span t-esc="conv.name"/>
                             <button class="o_erp_chat_delete_btn"
+                                    t-on-click.stop="() => this.renameConv(conv.id)">
+                                <i class="fa fa-pencil"/>
+                            </button>
+                            <button class="o_erp_chat_delete_btn"
                                     t-on-click.stop="() => this.deleteConv(conv.id)">
                                 <i class="fa fa-trash"/>
                             </button>
@@ -27,7 +31,7 @@
                     </t>
                 </div>
             </div>
-            <div class="o_erp_chat_messages">
+            <div class="o_erp_chat_messages" t-ref="messages">
                 <t t-foreach="messages" t-as="msg" t-key="msg_index">
                     <div class="o_erp_chat_message" t-att-class="'is-' + msg.role + (msg.type === 'table' ? ' is-table' : '')">
                         <t t-if="msg.type === 'table'">
@@ -58,11 +62,32 @@
                                 </table>
                             </div>
                         </t>
-                        <span t-else="" t-out="formatText(msg.text)"/>
+                        <t t-else="">
+                            <details t-if="msg.steps and msg.steps.length" class="o_erp_chat_steps">
+                                <summary>
+                                    Thought · <t t-esc="msg.steps.length"/> steps
+                                    <t t-if="msg.tools and msg.tools.length">
+                                        · used <t t-esc="msg.tools.length"/> tool<t t-if="msg.tools.length > 1">s</t> from <t t-esc="serversFromTools(msg.tools).join(', ')"/>
+                                    </t>
+                                </summary>
+                                <t t-foreach="msg.steps" t-as="step" t-key="step_index">
+                                    <div class="o_erp_chat_step" t-esc="step"/>
+                                </t>
+                            </details>
+                            <span t-out="formatText(msg.text)"/>
+                        </t>
                     </div>
                 </t>
-                <div t-if="state.loading" class="o_erp_chat_message is-thinking">
-                    <span>...</span>
+                <div t-if="state.loading" class="o_erp_chat_thinking">
+                    <div class="o_erp_chat_thinking_head">
+                        <i class="fa fa-spinner fa-spin"/>
+                        <span>Thinking...</span>
+                    </div>
+                    <div t-if="state.liveSteps.length" class="o_erp_chat_thinking_steps">
+                        <t t-foreach="state.liveSteps" t-as="step" t-key="step_index">
+                            <div class="o_erp_chat_step" t-esc="step"/>
+                        </t>
+                    </div>
                 </div>
             </div>
             <div class="o_erp_chat_input_bar">
@@ -72,7 +97,12 @@
                     t-model="state.input"
                     t-on-keydown="onKeydown"
                     rows="1"/>
-                <button class="o_erp_chat_send" t-on-click="onSend">
+                <button t-if="state.loading" class="o_erp_chat_send is-stop"
+                        t-on-click="cancelSend" title="Stop">
+                    <i class="fa fa-stop"/>
+                </button>
+                <button t-else="" class="o_erp_chat_send" t-on-click="onSend"
+                        t-att-disabled="!activeConv">
                     <i class="fa fa-paper-plane"/>
                 </button>
             </div>

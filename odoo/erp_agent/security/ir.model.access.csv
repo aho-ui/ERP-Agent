@@ -1,1 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_erp_agent_conversation,erp_agent.conversation,model_erp_agent_conversation,base.group_user,1,1,1,1
+access_erp_agent_message,erp_agent.message,model_erp_agent_message,base.group_user,1,1,1,1
+access_erp_agent_agent,erp_agent.agent,model_erp_agent_agent,base.group_user,1,1,1,1
