@@ -19,11 +19,14 @@
             "json_repair",
         ],
     },
-    # "post_load": "erp_agent.server.start",
     "post_load": "start",
+    "data": [
+        "security/ir.model.access.csv",
+        "security/erp_agent_security.xml",
+        "views/erp_agent_menus.xml",
+    ],
     "assets": {
         "web.assets_backend": [
-            "erp_agent/static/src/test/agent.js",
             "erp_agent/static/src/lib/marked.min.js",
             "erp_agent/static/src/lib/purify.min.js",
             "erp_agent/static/src/components/AgentSettings/AgentSettings.js",
@@ -35,6 +38,9 @@
             "erp_agent/static/src/components/AgentWidget/AgentWidget.js",
             "erp_agent/static/src/components/AgentWidget/AgentWidget.xml",
             "erp_agent/static/src/components/AgentWidget/AgentWidget.scss",
+            "erp_agent/static/src/dashboard/Dashboard.js",
+            "erp_agent/static/src/dashboard/Dashboard.xml",
+            "erp_agent/static/src/dashboard/Dashboard.scss",
         ],
     },
 }

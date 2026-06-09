@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates>
+    <t t-name="erp_agent.Dashboard">
+        <div class="o_erp_dashboard">
+            <div class="o_erp_dashboard_tabs">
+                <t t-foreach="tabs" t-as="tab" t-key="tab.id">
+                    <button class="o_erp_dashboard_tab"
+                            t-att-class="{'is-active': state.active === tab.id}"
+                            t-on-click="() => this.switchTab(tab.id)">
+                        <t t-esc="tab.label"/>
+                    </button>
+                </t>
+            </div>
+            <div class="o_erp_dashboard_content">
+                <t t-if="state.active === 'health'">
+                    <div class="o_erp_health">
+                        <div class="o_erp_health_actions">
+                            <button class="o_erp_health_rebuild"
+                                    t-on-click="manualRebuild"
+                                    t-att-disabled="state.rebuilding">
+                                <i t-att-class="state.rebuilding ? 'fa fa-spinner fa-spin' : 'fa fa-refresh'"/>
+                                <t t-if="state.rebuilding">Rebuilding...</t>
+                                <t t-else="">Rebuild MCP</t>
+                            </button>
+                        </div>
+                        <div class="o_erp_health_row">
+                            <span class="o_erp_health_dot"
+                                  t-attf-style="background: {{ state.health.running ? '#28a745' : '#dc3545' }}"/>
+                            <span class="o_erp_health_name">Backend</span>
+                            <span class="o_erp_health_status" t-esc="state.health.running ? 'Up' : 'Down'"/>
+                            <span class="o_erp_health_uptime" t-esc="formatUptime(state.health.backend_uptime)"/>
+                            <span class="o_erp_health_error">—</span>
+                        </div>
+                        <t t-foreach="serverList" t-as="srv" t-key="srv.name">
+                            <div class="o_erp_health_row">
+                                <span class="o_erp_health_dot" t-attf-style="background: {{ dotColor(srv.state) }}"/>
+                                <span class="o_erp_health_name" t-esc="'MCP · ' + srv.name"/>
+                                <span class="o_erp_health_status" t-esc="stateLabel(srv.state)"/>
+                                <span class="o_erp_health_uptime"
+                                      t-esc="srv.state === 2 ? formatUptime(srv.uptime) : '—'"/>
+                                <span class="o_erp_health_error" t-esc="srv.reason || '—'"/>
+                            </div>
+                        </t>
+                        <div class="o_erp_health_chart">
+                            <canvas t-ref="uptimeChart"/>
+                        </div>
+                    </div>
+                </t>
+                <t t-elif="state.active === 'activity'">
+                    <div class="o_erp_activity">
+                        <div class="o_erp_dashboard_grid">
+                            <div class="o_erp_dashboard_card">
+                                <div class="o_erp_dashboard_card_label">Calls (sqlite)</div>
+                                <div class="o_erp_dashboard_card_value" t-esc="state.activity.totals.sqlite or 0"/>
+                            </div>
+                            <div class="o_erp_dashboard_card">
+                                <div class="o_erp_dashboard_card_label">Calls (odoo)</div>
+                                <div class="o_erp_dashboard_card_value" t-esc="state.activity.totals.odoo or 0"/>
+                            </div>
+                            <div class="o_erp_dashboard_card">
+                                <div class="o_erp_dashboard_card_label">Avg steps / call</div>
+                                <div class="o_erp_dashboard_card_value" t-esc="state.activity.avg_steps"/>
+                            </div>
+                        </div>
+                        <div class="o_erp_activity_charts">
+                            <div class="o_erp_activity_chart">
+                                <div class="o_erp_activity_chart_head">
+                                    <span class="o_erp_activity_chart_title">Calls &amp; errors per day</span>
+                                    <div class="o_erp_activity_controls">
+                                        <label class="o_erp_activity_label">Days</label>
+                                        <input type="range" min="1" max="90" class="o_erp_activity_slider"
+                                               t-att-value="state.activityDays"
+                                               t-on-input="(ev) => this.onDaysChange(ev.target.value)"/>
+                                        <input type="number" min="1" max="90" class="o_erp_activity_number"
+                                               t-att-value="state.activityDays"
+                                               t-on-change="(ev) => this.onDaysChange(ev.target.value)"/>
+                                    </div>
+                                </div>
+                                <div class="o_erp_activity_chart_body">
+                                    <canvas t-ref="activityChart"/>
+                                </div>
+                            </div>
+                            <div class="o_erp_activity_chart">
+                                <div class="o_erp_activity_chart_head">
+                                    <span class="o_erp_activity_chart_title">Calls by agent</span>
+                                </div>
+                                <div class="o_erp_activity_chart_body">
+                                    <canvas t-ref="perAgentChart"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="o_erp_tools_leaderboard">
+                            <div class="o_erp_tools_leaderboard_head">Top tools</div>
+                            <t t-foreach="state.activity.top_tools" t-as="t" t-key="t.name">
+                                <div class="o_erp_tools_leaderboard_row">
+                                    <span class="o_erp_tools_leaderboard_rank" t-esc="t_index + 1"/>
+                                    <span class="o_erp_tools_leaderboard_name" t-esc="t.name"/>
+                                    <span class="o_erp_tools_leaderboard_bar">
+                                        <span class="o_erp_tools_leaderboard_bar_fill"
+                                              t-attf-style="width: {{ Math.min(100, t.count * 3) }}%"/>
+                                    </span>
+                                    <span class="o_erp_tools_leaderboard_count" t-esc="t.count"/>
+                                </div>
+                            </t>
+                        </div>
+                        <table class="o_erp_activity_table">
+                            <thead>
+                                <tr>
+                                    <th t-if="state.activity.is_admin">User</th>
+                                    <th>Time</th>
+                                    <th>Agent</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="state.activity.calls" t-as="call" t-key="call.id || call_index">
+                                    <tr class="o_erp_activity_row" t-on-click="() => this.toggleCall(call.id)">
+                                        <td t-if="state.activity.is_admin" t-esc="call.user"/>
+                                        <td t-esc="formatTs(call.ts)"/>
+                                        <td t-esc="call.agent or '—'"/>
+                                        <td t-esc="call.actions"/>
+                                    </tr>
+                                    <tr t-if="state.expandedCalls[call.id]" class="o_erp_activity_detail_row">
+                                        <td t-att-colspan="state.activity.is_admin ? 4 : 3" class="o_erp_activity_detail">
+                                            <div class="o_erp_activity_detail_block">
+                                                <div class="o_erp_activity_detail_label">Query</div>
+                                                <div class="o_erp_activity_detail_value" t-esc="call.query or '—'"/>
+                                            </div>
+                                            <div class="o_erp_activity_detail_block" t-if="call.tools and call.tools.length">
+                                                <div class="o_erp_activity_detail_label">Tools (<t t-esc="call.tools.length"/>)</div>
+                                                <ul class="o_erp_activity_detail_list">
+                                                    <t t-foreach="call.tools" t-as="t" t-key="t_index">
+                                                        <li t-esc="t"/>
+                                                    </t>
+                                                </ul>
+                                            </div>
+                                            <div class="o_erp_activity_detail_block" t-if="call.steps and call.steps.length">
+                                                <div class="o_erp_activity_detail_label">Steps</div>
+                                                <div class="o_erp_activity_detail_steps">
+                                                    <t t-foreach="call.steps" t-as="s" t-key="s_index">
+                                                        <div class="o_erp_activity_detail_step" t-esc="s"/>
+                                                    </t>
+                                                </div>
+                                            </div>
+                                            <div class="o_erp_activity_detail_block">
+                                                <div class="o_erp_activity_detail_label">Result</div>
+                                                <div class="o_erp_activity_detail_value" t-esc="call.result or '—'"/>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                </t>
+                <t t-elif="state.active === 'agents'">
+                    <div class="o_erp_agents">
+                        <div class="o_erp_agents_head">
+                            <span class="o_erp_agents_title">Agents</span>
+                            <button class="o_erp_agents_new" t-on-click="() => this.openNewAgent()" t-att-disabled="!!state.newDraft">+ New agent</button>
+                        </div>
+
+                        <div t-if="state.newDraft" class="o_erp_agent_card is-new">
+                            <div class="o_erp_agent_row">
+                                <div class="o_erp_agent_info">
+                                    <div class="o_erp_agent_name_row">
+                                        <span class="o_erp_agent_name">New agent</span>
+                                        <span class="o_erp_agent_badge is-draft">draft</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="o_erp_agent_detail">
+                                <label class="o_erp_agent_field_label">Name</label>
+                                <input class="o_erp_agent_input" type="text" placeholder="agent_name"
+                                       t-model="state.newDraft.name"/>
+                                <label class="o_erp_agent_field_label">Description</label>
+                                <input class="o_erp_agent_input" type="text" placeholder="Short description"
+                                       t-model="state.newDraft.description"/>
+                                <label class="o_erp_agent_field_label">System prompt</label>
+                                <textarea class="o_erp_agent_textarea" rows="6"
+                                          t-model="state.newDraft.system_prompt"/>
+                                <label class="o_erp_agent_field_label">Allowed tools</label>
+                                <div class="o_erp_agent_tool_picker">
+                                    <t t-foreach="state.agentTools" t-as="tool" t-key="tool">
+                                        <label class="o_erp_agent_tool_opt">
+                                            <input type="checkbox"
+                                                   t-att-checked="state.newDraft.tools[tool]"
+                                                   t-on-change="() => this.toggleNewTool(tool)"/>
+                                            <span t-esc="tool"/>
+                                        </label>
+                                    </t>
+                                    <div t-if="!state.agentTools.length" class="o_erp_agents_empty">
+                                        No MCP tools available (backend not ready).
+                                    </div>
+                                </div>
+                                <div class="o_erp_agent_form_actions">
+                                    <button class="o_erp_agent_save" t-on-click="() => this.saveNewAgent()">Save</button>
+                                    <button class="o_erp_agent_cancel" t-on-click="() => this.cancelNewAgent()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <t t-if="!state.agents.length and !state.newDraft">
+                            <div class="o_erp_agents_empty">No agents found.</div>
+                        </t>
+
+                        <t t-foreach="state.agents" t-as="ag" t-key="ag.id">
+                            <div class="o_erp_agent_card" t-att-class="{'is-inactive': !ag.active, 'is-expanded': state.expandedAgents[ag.id]}">
+                                <div class="o_erp_agent_row" t-on-click="() => this.toggleAgentExpand(ag)">
+                                    <div class="o_erp_agent_info">
+                                        <div class="o_erp_agent_name_row">
+                                            <i class="fa o_erp_agent_chevron"
+                                               t-att-class="state.expandedAgents[ag.id] ? 'fa-chevron-down' : 'fa-chevron-right'"/>
+                                            <span class="o_erp_agent_name" t-esc="ag.name"/>
+                                            <span t-if="ag.is_default" class="o_erp_agent_badge">default</span>
+                                        </div>
+                                        <div class="o_erp_agent_desc" t-esc="ag.description or '—'"/>
+                                        <div class="o_erp_agent_tools" t-esc="(ag.allowed_tools || []).length + ' tools'"/>
+                                    </div>
+                                    <div class="o_erp_agent_actions" t-on-click.stop="">
+                                        <span class="o_erp_agent_stat" title="Calls in last 30 days">
+                                            <t t-esc="agent30d(ag.name)"/><small>/30d</small>
+                                        </span>
+                                        <label class="o_erp_agent_switch" t-att-title="ag.active ? 'Active' : 'Inactive'">
+                                            <input type="checkbox"
+                                                   t-att-checked="ag.active"
+                                                   t-on-change="() => this.toggleAgentActive(ag)"/>
+                                            <span class="o_erp_agent_switch_slider"/>
+                                        </label>
+                                        <button t-if="!ag.is_default" class="o_erp_agent_btn"
+                                                t-on-click="() => this.deleteAgent(ag.id)">
+                                            <i class="fa fa-trash"/>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div t-if="state.expandedAgents[ag.id]" class="o_erp_agent_detail"
+                                     t-att-class="{'is-readonly': ag.is_default}">
+                                    <t t-if="ag.is_default">
+                                        <label class="o_erp_agent_field_label">Name</label>
+                                        <div class="o_erp_agent_readonly_value" t-esc="ag.name"/>
+                                        <label class="o_erp_agent_field_label">Description</label>
+                                        <div class="o_erp_agent_readonly_value" t-esc="ag.description or '—'"/>
+                                        <label class="o_erp_agent_field_label">System prompt</label>
+                                        <div class="o_erp_agent_readonly_value is-prompt" t-esc="ag.system_prompt or '—'"/>
+                                        <label class="o_erp_agent_field_label">Allowed tools</label>
+                                        <div class="o_erp_agent_tool_picker is-readonly">
+                                            <t t-foreach="ag.allowed_tools" t-as="tool" t-key="tool_index">
+                                                <div class="o_erp_agent_tool_opt"><span t-esc="tool"/></div>
+                                            </t>
+                                            <div t-if="!(ag.allowed_tools || []).length" class="o_erp_agents_empty">
+                                                No tools.
+                                            </div>
+                                        </div>
+                                        <div class="o_erp_agent_readonly_note">
+                                            Default agent — shown as reference. Toggle off to disable, or create a custom one to edit.
+                                        </div>
+                                    </t>
+                                    <t t-else="">
+                                        <label class="o_erp_agent_field_label">Name</label>
+                                        <input class="o_erp_agent_input" type="text"
+                                               t-model="state.agentEdits[ag.id].name"/>
+                                        <label class="o_erp_agent_field_label">Description</label>
+                                        <input class="o_erp_agent_input" type="text"
+                                               t-model="state.agentEdits[ag.id].description"/>
+                                        <label class="o_erp_agent_field_label">System prompt</label>
+                                        <textarea class="o_erp_agent_textarea" rows="6"
+                                                  t-model="state.agentEdits[ag.id].system_prompt"/>
+                                        <label class="o_erp_agent_field_label">Allowed tools</label>
+                                        <div class="o_erp_agent_tool_picker">
+                                            <t t-foreach="state.agentTools" t-as="tool" t-key="tool">
+                                                <label class="o_erp_agent_tool_opt">
+                                                    <input type="checkbox"
+                                                           t-att-checked="state.agentEdits[ag.id].tools[tool]"
+                                                           t-on-change="() => this.toggleEditTool(ag.id, tool)"/>
+                                                    <span t-esc="tool"/>
+                                                </label>
+                                            </t>
+                                            <div t-if="!state.agentTools.length" class="o_erp_agents_empty">
+                                                No MCP tools available (backend not ready).
+                                            </div>
+                                        </div>
+                                        <div class="o_erp_agent_form_actions">
+                                            <button class="o_erp_agent_save" t-on-click="() => this.saveAgentEdit(ag)">Save</button>
+                                            <button class="o_erp_agent_cancel" t-on-click="() => this.toggleAgentExpand(ag)">Cancel</button>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+                <t t-elif="state.active === 'tools'">
+                    <div class="o_erp_tools_tab">
+                        <t t-foreach="Object.keys(toolsByServer)" t-as="server" t-key="server">
+                            <div class="o_erp_tools_group">
+                                <div class="o_erp_tools_group_head">
+                                    <span class="o_erp_tools_group_name" t-esc="server"/>
+                                    <span class="o_erp_tools_group_count"
+                                          t-esc="toolsByServer[server].length + ' tools'"/>
+                                </div>
+                                <table class="o_erp_tools_table">
+                                    <thead>
+                                        <tr>
+                                            <th>Tool</th>
+                                            <th>Agents</th>
+                                            <th class="is-num">Calls</th>
+                                            <th>Last</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="toolsByServer[server]" t-as="tool" t-key="tool.name">
+                                            <tr class="o_erp_tools_row"
+                                                t-att-class="{'is-unused': tool.calls === 0}"
+                                                t-on-click="() => this.toggleToolExpand(tool.name)">
+                                                <td class="o_erp_tools_name">
+                                                    <i class="fa o_erp_tools_chevron"
+                                                       t-att-class="state.expandedTools[tool.name] ? 'fa-chevron-down' : 'fa-chevron-right'"/>
+                                                    <span t-esc="tool.name"/>
+                                                </td>
+                                                <td class="o_erp_tools_agents" t-esc="tool.agents.join(', ') or '—'"/>
+                                                <td class="is-num" t-esc="tool.calls"/>
+                                                <td t-esc="tool.last"/>
+                                            </tr>
+                                            <tr t-if="state.expandedTools[tool.name]" class="o_erp_tools_detail_row">
+                                                <td colspan="4" class="o_erp_tools_detail">
+                                                    <div class="o_erp_tools_detail_block">
+                                                        <div class="o_erp_tools_detail_label">Description</div>
+                                                        <div class="o_erp_tools_detail_value" t-esc="tool.description"/>
+                                                    </div>
+                                                    <div class="o_erp_tools_detail_block" t-if="tool.params.length">
+                                                        <div class="o_erp_tools_detail_label">Parameters</div>
+                                                        <table class="o_erp_tools_params">
+                                                            <thead>
+                                                                <tr><th>Name</th><th>Type</th><th>Default</th></tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <t t-foreach="tool.params" t-as="p" t-key="p_index">
+                                                                    <tr>
+                                                                        <td class="o_erp_tools_param_name" t-esc="p.name"/>
+                                                                        <td class="o_erp_tools_param_type" t-esc="p.type"/>
+                                                                        <td t-esc="p.default === undefined ? '—' : (p.default + '')"/>
+                                                                    </tr>
+                                                                </t>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div class="o_erp_tools_detail_block" t-if="!tool.params.length">
+                                                        <div class="o_erp_tools_detail_label">Parameters</div>
+                                                        <div class="o_erp_tools_detail_value">None.</div>
+                                                    </div>
+                                                    <div class="o_erp_tools_detail_block" t-if="tool.last_call">
+                                                        <div class="o_erp_tools_detail_label">Last call</div>
+                                                        <div class="o_erp_tools_detail_value">
+                                                            <t t-esc="tool.last_call.ts"/> · <t t-esc="tool.last_call.agent"/>
+                                                        </div>
+                                                        <div class="o_erp_tools_detail_sublabel">Args</div>
+                                                        <div class="o_erp_tools_detail_code" t-esc="tool.last_call.args"/>
+                                                        <div class="o_erp_tools_detail_sublabel">Result preview</div>
+                                                        <div class="o_erp_tools_detail_code" t-esc="tool.last_call.result_preview"/>
+                                                    </div>
+                                                    <div class="o_erp_tools_detail_block" t-if="!tool.last_call">
+                                                        <div class="o_erp_tools_detail_label">Last call</div>
+                                                        <div class="o_erp_tools_detail_value">Never called.</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+            </div>
+        </div>
+    </t>
+</templates>

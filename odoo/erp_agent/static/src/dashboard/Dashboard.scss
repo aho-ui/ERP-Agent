@@ -1,0 +1,911 @@
+.o_erp_dashboard {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+    background: #fafafa;
+    overflow: auto;
+}
+
+.o_erp_dashboard_tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.o_erp_dashboard_tab {
+    background: none;
+    border: none;
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+
+    &:hover { background: #f5f5f5; }
+    &.is-active {
+        color: #714B67;
+        border-bottom-color: #714B67;
+    }
+}
+
+.o_erp_dashboard_content {
+    flex: 1;
+    padding: 12px 0;
+    font-size: 14px;
+    color: #555;
+}
+
+.o_erp_dashboard_grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.o_erp_dashboard_card {
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.o_erp_dashboard_card_label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.o_erp_dashboard_card_value {
+    font-size: 26px;
+    font-weight: 700;
+    color: #333;
+    line-height: 1.1;
+}
+
+.o_erp_health {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.o_erp_health_actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.o_erp_health_rebuild {
+    background: white;
+    border: 1px solid #e0e0e0;
+    color: #555;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+        background: #f5f5f5;
+        color: #714B67;
+        border-color: #d1c0cb;
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    i { margin-right: 4px; }
+}
+
+.o_erp_health_row {
+    display: grid;
+    grid-template-columns: 14px 150px 90px 110px 1fr;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.o_erp_health_dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.o_erp_health_name {
+    font-weight: 600;
+    color: #333;
+}
+
+.o_erp_health_status { color: #555; }
+
+.o_erp_health_uptime { color: #777; }
+
+.o_erp_health_error {
+    color: #b04632;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.o_erp_health_chart {
+    margin-top: 12px;
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 12px;
+    height: 260px;
+    position: relative;
+}
+
+.o_erp_health_chart canvas {
+    max-height: 236px;
+}
+
+.o_erp_activity {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.o_erp_activity_charts {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 12px;
+}
+
+@media (max-width: 1100px) {
+    .o_erp_activity_charts {
+        grid-template-columns: 1fr;
+    }
+}
+
+.o_erp_activity_chart {
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.o_erp_activity_chart_head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.o_erp_activity_chart_title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+}
+
+.o_erp_activity_chart_body {
+    height: 220px;
+    position: relative;
+}
+
+.o_erp_activity_chart_body canvas {
+    max-height: 220px;
+}
+
+.o_erp_activity_controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.o_erp_activity_label {
+    font-size: 11px;
+    color: #888;
+    margin: 0;
+}
+
+.o_erp_activity_slider {
+    width: 140px;
+    cursor: pointer;
+}
+
+.o_erp_activity_number {
+    width: 56px;
+    padding: 3px 6px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.o_erp_activity_table {
+    width: 100%;
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 8px;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    overflow: hidden;
+
+    th, td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    th {
+        background: #fafafa;
+        font-weight: 600;
+        color: #555;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    tbody tr.o_erp_activity_row {
+        cursor: pointer;
+
+        &:hover {
+            background: #fafafa;
+        }
+    }
+
+    tbody tr.o_erp_activity_detail_row {
+        background: #f7f5f7;
+
+        &:hover {
+            background: #f7f5f7;
+        }
+    }
+}
+
+.o_erp_activity_detail {
+    padding: 12px 16px;
+    font-size: 12px;
+    color: #555;
+}
+
+.o_erp_activity_detail_block {
+    margin-bottom: 10px;
+
+    &:last-child {
+        margin-bottom: 0;
+    }
+}
+
+.o_erp_activity_detail_label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.o_erp_activity_detail_value {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #333;
+}
+
+.o_erp_activity_detail_list {
+    margin: 0;
+    padding-left: 18px;
+    font-family: monospace;
+    font-size: 11px;
+    color: #555;
+}
+
+.o_erp_activity_detail_steps {
+    max-height: 200px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #ececec;
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+.o_erp_activity_detail_step {
+    font-family: monospace;
+    font-size: 11px;
+    color: #666;
+    padding: 3px 0;
+    border-bottom: 1px solid #f3f3f3;
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.o_erp_agents {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.o_erp_agents_head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.o_erp_agents_title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.o_erp_agents_new {
+    background: #714B67;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover {
+        background: #5a3a54;
+    }
+}
+
+.o_erp_agents_empty {
+    color: #999;
+    font-size: 12px;
+    padding: 8px 0;
+}
+
+.o_erp_agent_card {
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 8px;
+    overflow: hidden;
+
+    &.is-inactive {
+        opacity: 0.55;
+    }
+
+    &.is-expanded {
+        border-color: #d1c0cb;
+        box-shadow: 0 2px 6px rgba(113, 75, 103, 0.08);
+    }
+
+    &.is-new {
+        border-color: #d1c0cb;
+    }
+}
+
+.o_erp_agent_row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+
+    &:hover {
+        background: #fafafa;
+    }
+}
+
+.o_erp_agent_chevron {
+    font-size: 10px;
+    color: #aaa;
+    width: 10px;
+    margin-right: 4px;
+}
+
+.o_erp_agent_name_row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.o_erp_agent_name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+}
+
+.o_erp_agent_badge {
+    background: #f0e8ef;
+    color: #714B67;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+
+    &.is-draft {
+        background: #fff3cd;
+        color: #8a6d3b;
+    }
+}
+
+.o_erp_agent_switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 18px;
+    margin: 0 4px 0 0;
+    cursor: pointer;
+
+    input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .o_erp_agent_switch_slider {
+        position: absolute;
+        inset: 0;
+        background: #ccc;
+        border-radius: 18px;
+        transition: background 0.15s;
+
+        &::before {
+            content: "";
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            left: 2px;
+            top: 2px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.15s;
+        }
+    }
+
+    input:checked + .o_erp_agent_switch_slider {
+        background: #714B67;
+
+        &::before {
+            transform: translateX(16px);
+        }
+    }
+}
+
+.o_erp_agent_desc {
+    font-size: 12px;
+    color: #777;
+}
+
+.o_erp_agent_tools {
+    font-size: 11px;
+    color: #999;
+}
+
+.o_erp_agent_actions {
+    display: flex;
+    gap: 4px;
+}
+
+.o_erp_agent_btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #888;
+    padding: 4px 6px;
+    border-radius: 4px;
+
+    &:hover {
+        background: #f5f5f5;
+        color: #714B67;
+    }
+}
+
+.o_erp_agent_detail {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    background: #fbfafb;
+    border-top: 1px solid #ececec;
+
+    &.is-readonly {
+        background: #f5f4f5;
+    }
+}
+
+.o_erp_agent_field_label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 6px 0 0;
+}
+
+.o_erp_agent_readonly_value {
+    font-size: 12px;
+    color: #666;
+    background: #efedef;
+    border: 1px solid #e2e0e2;
+    border-radius: 6px;
+    padding: 6px 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    &.is-prompt {
+        font-family: monospace;
+        font-size: 11px;
+        max-height: 180px;
+        overflow-y: auto;
+    }
+}
+
+.o_erp_agent_readonly_note {
+    font-size: 11px;
+    color: #999;
+    font-style: italic;
+    margin-top: 6px;
+}
+
+.o_erp_agent_input,
+.o_erp_agent_textarea {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+
+    &:focus {
+        border-color: #714B67;
+    }
+}
+
+.o_erp_agent_textarea {
+    resize: vertical;
+}
+
+.o_erp_agent_tools_label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.o_erp_agent_tool_picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #f0f0f0;
+    background: white;
+    border-radius: 6px;
+    padding: 8px;
+
+    &.is-readonly {
+        background: #efedef;
+        color: #777;
+    }
+}
+
+.o_erp_agent_tool_opt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #555;
+    margin: 0;
+    cursor: pointer;
+}
+
+.o_erp_agent_form_actions {
+    display: flex;
+    gap: 8px;
+}
+
+.o_erp_agent_save {
+    background: #714B67;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover {
+        background: #5a3a54;
+    }
+}
+
+.o_erp_agent_cancel {
+    background: none;
+    border: 1px solid #e0e0e0;
+    color: #555;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover {
+        background: #f5f5f5;
+    }
+}
+
+/* ---- Activity additions: leaderboard, agent stats ---- */
+
+.o_erp_agent_stat {
+    font-size: 12px;
+    color: #555;
+    background: #f5f5f5;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-variant-numeric: tabular-nums;
+
+    small {
+        color: #999;
+        font-size: 10px;
+        margin-left: 2px;
+    }
+}
+
+.o_erp_tools_leaderboard {
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+
+.o_erp_tools_leaderboard_head {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.o_erp_tools_leaderboard_row {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1.4fr) minmax(0, 1fr) 40px;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #555;
+    padding: 4px 0;
+    border-bottom: 1px solid #f3f3f3;
+
+    &:last-child { border-bottom: none; }
+}
+
+.o_erp_tools_leaderboard_rank {
+    color: #aaa;
+    font-weight: 600;
+    text-align: right;
+}
+
+.o_erp_tools_leaderboard_name {
+    font-family: monospace;
+    font-size: 11px;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.o_erp_tools_leaderboard_bar {
+    display: block;
+    height: 6px;
+    background: #f0f0f0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.o_erp_tools_leaderboard_bar_fill {
+    display: block;
+    height: 100%;
+    background: #714B67;
+}
+
+.o_erp_tools_leaderboard_count {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #333;
+    font-weight: 600;
+}
+
+/* ---- Tools tab ---- */
+
+.o_erp_tools_tab {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.o_erp_tools_group {
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.o_erp_tools_group_head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #fafafa;
+    border-bottom: 1px solid #ececec;
+}
+
+.o_erp_tools_group_name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.o_erp_tools_group_count {
+    font-size: 11px;
+    color: #888;
+}
+
+.o_erp_tools_table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+
+    th, td {
+        padding: 6px 14px;
+        text-align: left;
+        border-bottom: 1px solid #f3f3f3;
+    }
+
+    th {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #888;
+        background: #fdfdfd;
+        font-weight: 600;
+    }
+
+    th.is-num,
+    td.is-num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    tbody tr.is-unused {
+        color: #aaa;
+    }
+}
+
+.o_erp_tools_name {
+    font-family: monospace;
+    font-size: 11px;
+    color: #333;
+}
+
+.o_erp_tools_agents {
+    font-size: 11px;
+    color: #777;
+}
+
+.o_erp_tools_row {
+    cursor: pointer;
+
+    &:hover {
+        background: #fafafa;
+    }
+}
+
+.o_erp_tools_chevron {
+    font-size: 9px;
+    color: #aaa;
+    width: 10px;
+    margin-right: 6px;
+}
+
+.o_erp_tools_detail_row {
+    background: #fbfafb;
+}
+
+.o_erp_tools_detail {
+    padding: 10px 16px 14px !important;
+    font-size: 12px;
+    color: #555;
+}
+
+.o_erp_tools_detail_block {
+    margin-bottom: 10px;
+
+    &:last-child { margin-bottom: 0; }
+}
+
+.o_erp_tools_detail_label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.o_erp_tools_detail_sublabel {
+    font-size: 10px;
+    font-weight: 600;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 6px 0 2px;
+}
+
+.o_erp_tools_detail_value {
+    color: #333;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.o_erp_tools_detail_code {
+    font-family: monospace;
+    font-size: 11px;
+    color: #444;
+    background: white;
+    border: 1px solid #ececec;
+    border-radius: 4px;
+    padding: 4px 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.o_erp_tools_params {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: white;
+    border: 1px solid #ececec;
+    border-radius: 4px;
+
+    th, td {
+        padding: 4px 8px;
+        text-align: left;
+        font-size: 11px;
+        border-bottom: 1px solid #f3f3f3;
+    }
+
+    th {
+        font-size: 10px;
+        text-transform: uppercase;
+        color: #888;
+        font-weight: 600;
+        background: #fdfdfd;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+}
+
+.o_erp_tools_param_name {
+    font-family: monospace;
+    color: #333;
+}
+
+.o_erp_tools_param_type {
+    color: #888;
+    font-style: italic;
+}
