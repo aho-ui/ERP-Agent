@@ -33,7 +33,10 @@ class AgentWidget extends Component {
                 const dw = this.bubbleOnRight
                     ? this._resize.startX - e.clientX
                     : e.clientX - this._resize.startX;
-                const dh = e.clientY - this._resize.startY;
+                // const dh = e.clientY - this._resize.startY;
+                const dh = this.bubbleOnBottom
+                    ? this._resize.startY - e.clientY
+                    : e.clientY - this._resize.startY;
                 this.state.panelW = Math.max(280, this._resize.origW + dw);
                 this.state.panelH = Math.max(300, this._resize.origH + dh);
             }
@@ -55,6 +58,7 @@ class AgentWidget extends Component {
             document.addEventListener("mousemove", this._onMouseMove);
             document.addEventListener("mouseup", this._onMouseUp);
             this._warmProfileCache();
+            this._warmAgentCache();
         });
         onWillUnmount(() => {
             document.removeEventListener("mousemove", this._onMouseMove);
@@ -76,6 +80,20 @@ class AgentWidget extends Component {
         }
     }
 
+    async _warmAgentCache() {
+        // load custom agents from the DB into the shared registry cache so the
+        // dispatch path can route to them.
+        try {
+            await fetch("/erp_agent/agent", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ jsonrpc: "2.0", method: "call", params: { action: "list" } }),
+            });
+        } catch (e) {
+            // best effort
+        }
+    }
+
     selectProfile(id) {
         this.state.activeProfileId = id || "";
         if (id) {
@@ -89,6 +107,10 @@ class AgentWidget extends Component {
         return this.state.x >= window.innerWidth / 2;
     }
 
+    get bubbleOnBottom() {
+        return this.state.y >= window.innerHeight / 2;
+    }
+
     get showPanel() {
         return this.state.open && !this.state.dragging;
     }
@@ -97,7 +119,8 @@ class AgentWidget extends Component {
         const { x, y, panelW, panelH } = this.state;
         const gap = 12, size = 48;
         const left = this.bubbleOnRight ? x - panelW - gap : x + size + gap;
-        const top = Math.min(y, window.innerHeight - panelH);
+        // const top = Math.min(y, window.innerHeight - panelH);
+        const top = Math.max(0, this.bubbleOnBottom ? (y + size) - panelH : y);
         return `position:fixed;z-index:9998;left:${left}px;top:${top}px;` +
                `width:${panelW}px;height:${panelH}px;background:white;border-radius:12px;` +
                `box-shadow:0 8px 32px rgba(0,0,0,0.15);` +

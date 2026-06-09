@@ -17,19 +17,41 @@
     position: absolute;
     bottom: 0;
     right: 0;
-    width: 18px;
-    height: 18px;
+    width: 28px;
+    height: 28px;
     cursor: se-resize;
-    background: linear-gradient(135deg, transparent 40%, #d0d0d0 40%, #d0d0d0 55%, transparent 55%,
-                                        transparent 65%, #d0d0d0 65%, #d0d0d0 80%, transparent 80%);
-    border-radius: 0 0 12px 0;
+    background: transparent;
+    transition: background 0.12s;
+
+    &:hover {
+        background: radial-gradient(circle at bottom right, rgba(113, 75, 103, 0.45) 0%, rgba(113, 75, 103, 0.18) 45%, transparent 72%);
+    }
 
     &.is-left {
         right: auto;
         left: 0;
         cursor: sw-resize;
-        background: linear-gradient(225deg, transparent 40%, #d0d0d0 40%, #d0d0d0 55%, transparent 55%,
-                                            transparent 65%, #d0d0d0 65%, #d0d0d0 80%, transparent 80%);
-        border-radius: 0 0 0 12px;
+
+        &:hover {
+            background: radial-gradient(circle at bottom left, rgba(113, 75, 103, 0.45) 0%, rgba(113, 75, 103, 0.18) 45%, transparent 72%);
+        }
+    }
+
+    &.is-top {
+        bottom: auto;
+        top: 0;
+        cursor: ne-resize;
+
+        &:hover {
+            background: radial-gradient(circle at top right, rgba(113, 75, 103, 0.45) 0%, rgba(113, 75, 103, 0.18) 45%, transparent 72%);
+        }
+    }
+
+    &.is-top.is-left {
+        cursor: nw-resize;
+
+        &:hover {
+            background: radial-gradient(circle at top left, rgba(113, 75, 103, 0.45) 0%, rgba(113, 75, 103, 0.18) 45%, transparent 72%);
+        }
     }
 }

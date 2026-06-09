@@ -13,7 +13,7 @@
                                   profileId="state.activeProfileId"/>
                 </t>
                 <div class="o_agent_resize_handle"
-                     t-att-class="{'is-left': bubbleOnRight}"
+                     t-att-class="{'is-left': bubbleOnRight, 'is-top': bubbleOnBottom}"
                      t-on-mousedown="onResizeDown"/>
             </div>
         </t>
