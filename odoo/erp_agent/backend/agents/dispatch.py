@@ -85,6 +85,7 @@ class SubAgentRunner:
         final_text = "Task completed with no output."
         total_prompt = 0
         total_completion = 0
+        prev_call_sig: tuple | None = None  # (sorted tool name+args) to detect a stuck retry
 
         for iteration in range(self.MAX_TOOL_ITERATIONS):
             if iteration == 0:
@@ -106,6 +107,14 @@ class SubAgentRunner:
                 preview = final_text[:200] if isinstance(final_text, str) else str(final_text)[:200]
                 logger.info(f"[sub-agent:{agent_name}] <- {preview}")
                 break
+
+            # stuck-retry guard: same tool(s) + same args as last iteration -> stop
+            call_sig = tuple(sorted((tc.function.name, tc.function.arguments) for tc in msg.tool_calls))
+            if call_sig == prev_call_sig:
+                logger.warning(f"[sub-agent:{agent_name}] repeated identical tool call; stopping early")
+                final_text = msg.content or "Stopped: the same tool call was failing repeatedly."
+                break
+            prev_call_sig = call_sig
 
             messages.append({
                 "role": "assistant",
@@ -156,19 +165,27 @@ class DispatchTool(Tool):
     def name(self) -> str:
         return "dispatch"
 
-    @classmethod
-    async def refresh(cls) -> None:
-        agents = await AgentRegistry.aavailable(_main().healthy_servers())
+    # backup: description was cached here and rebuilt on health transitions /
+    # rebuild. Now the property below builds it live, so refresh is unused.
+    # @classmethod
+    # async def refresh(cls) -> None:
+    #     agents = await AgentRegistry.aavailable(_main().healthy_servers())
+    #     names = ", ".join(a["name"] for a in agents) or "none"
+    #     cls._description = (
+    #         "Route a task to a specialized domain agent. "
+    #         "Use this for all ERP operations instead of calling MCP tools directly. "
+    #         f"Available agents: {names}."
+    #     )
+
+    @property
+    def description(self) -> str:
+        agents = AgentRegistry.available(_main().healthy_servers())
         names = ", ".join(a["name"] for a in agents) or "none"
-        cls._description = (
+        return (
             "Route a task to a specialized domain agent. "
             "Use this for all ERP operations instead of calling MCP tools directly. "
             f"Available agents: {names}."
         )
-
-    @property
-    def description(self) -> str:
-        return self._description
 
     @property
     def parameters(self) -> dict[str, Any]:

@@ -34,9 +34,11 @@ def health() -> str:
         conn = get_conn()
         conn.execute("SELECT 1 FROM customers LIMIT 1")
         conn.close()
-        return json.dumps({"ok": True})
+        # return json.dumps({"ok": True})
+        return json.dumps({"status": "UP", "reason": "connected"})
     except Exception as e:
-        return json.dumps({"ok": False, "error": str(e)})
+        # return json.dumps({"ok": False, "error": str(e)})
+        return json.dumps({"status": "DOWN", "reason": str(e)})
 
 
 def _rows(cursor) -> list[dict]:

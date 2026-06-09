@@ -24,13 +24,62 @@ def connect():
 def health() -> str:
     try:
         connect()
-        return json.dumps({"ok": True})
+        # return json.dumps({"ok": True})
+        return json.dumps({"status": "UP", "reason": "connected"})
     except Exception as e:
-        return json.dumps({"ok": False, "error": str(e)})
+        # return json.dumps({"ok": False, "error": str(e)})
+        return json.dumps({"status": "DOWN", "reason": str(e)})
 
 
 def execute(uid, models, model, method, args, kwargs=None):
     return models.execute_kw(DB, uid, PASSWORD, model, method, args, kwargs or {})
+
+
+# which Odoo app provides each model — surfaced in error messages so users
+# know which module to install
+_MODEL_APP = {
+    "sale.order": "Sales",
+    "sale.order.line": "Sales",
+    "purchase.order": "Purchase",
+    "purchase.order.line": "Purchase",
+    "account.move": "Accounting / Invoicing",
+    "account.payment": "Accounting / Invoicing",
+    "product.product": "Inventory / Sales",
+    "res.partner": "Contacts",
+}
+
+# cache model-existence checks per process to avoid hammering ir.model
+_model_exists_cache: dict[str, bool] = {}
+
+
+def _model_exists(uid, models, name: str) -> bool:
+    if name in _model_exists_cache:
+        return _model_exists_cache[name]
+    try:
+        found = bool(execute(uid, models, "ir.model", "search",
+                             [[["model", "=", name]]], {"limit": 1}))
+    except Exception:
+        found = False
+    _model_exists_cache[name] = found
+    return found
+
+
+def _missing(model: str) -> str:
+    app = _MODEL_APP.get(model, "the relevant Odoo app")
+    return json.dumps({
+        "error": f"Model '{model}' is not installed on this Odoo instance. "
+                 f"Install the {app} module and try again."
+    })
+
+
+def _guard(needed: list[str]):
+    """Returns (uid, models) on success, or a JSON error string if any model
+    in `needed` doesn't exist. Use: r = _guard([...]); if isinstance(r, str): return r"""
+    uid, models = connect()
+    for m in needed:
+        if not _model_exists(uid, models, m):
+            return _missing(m)
+    return uid, models
 
 
 def build_domain(base: list, search: str, field: str = "name", record_id: int = 0) -> list:
@@ -44,7 +93,9 @@ def build_domain(base: list, search: str, field: str = "name", record_id: int = 
 
 @mcp.tool()
 def get_sales_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
-    uid, models = connect()
+    r = _guard(["sale.order"])
+    if isinstance(r, str): return r
+    uid, models = r
     domain = build_domain([], search, record_id=id)
     orders = execute(uid, models, "sale.order", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "date_order", "amount_total", "state"],
@@ -56,7 +107,9 @@ def get_sales_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 @mcp.tool()
 def get_customers(limit: int = 10, search: str = "", id: int = 0) -> str:
-    uid, models = connect()
+    r = _guard(["res.partner"])
+    if isinstance(r, str): return r
+    uid, models = r
     domain = build_domain([["is_company", "=", True]], search, record_id=id)
     customers = execute(uid, models, "res.partner", "search_read", domain, {
         "fields": ["id", "name", "email", "phone", "customer_rank"],
@@ -67,7 +120,9 @@ def get_customers(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 @mcp.tool()
 def get_vendors(limit: int = 10, search: str = "", id: int = 0) -> str:
-    uid, models = connect()
+    r = _guard(["res.partner"])
+    if isinstance(r, str): return r
+    uid, models = r
     domain = build_domain([["supplier_rank", ">", 0]], search, record_id=id)
     vendors = execute(uid, models, "res.partner", "search_read", domain, {
         "fields": ["id", "name", "email", "phone", "supplier_rank"],
@@ -78,7 +133,9 @@ def get_vendors(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 @mcp.tool()
 def get_products(limit: int = 10, search: str = "", id: int = 0) -> str:
-    uid, models = connect()
+    r = _guard(["product.product"])
+    if isinstance(r, str): return r
+    uid, models = r
     domain = build_domain([["sale_ok", "=", True]], search, record_id=id)
     products = execute(uid, models, "product.product", "search_read", domain, {
         "fields": ["id", "name", "list_price", "standard_price", "type", "default_code"],
@@ -89,7 +146,9 @@ def get_products(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 @mcp.tool()
 def get_purchase_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
-    uid, models = connect()
+    r = _guard(["purchase.order"])
+    if isinstance(r, str): return r
+    uid, models = r
     domain = build_domain([], search, record_id=id)
     orders = execute(uid, models, "purchase.order", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "date_order", "amount_total", "state"],
@@ -101,7 +160,9 @@ def get_purchase_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 @mcp.tool()
 def get_invoices(limit: int = 10, search: str = "", id: int = 0) -> str:
-    uid, models = connect()
+    r = _guard(["account.move"])
+    if isinstance(r, str): return r
+    uid, models = r
     domain = build_domain([["move_type", "=", "out_invoice"]], search, record_id=id)
     invoices = execute(uid, models, "account.move", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "invoice_date", "amount_total", "state", "payment_state"],
@@ -113,7 +174,9 @@ def get_invoices(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 @mcp.tool()
 def get_vendor_bills(limit: int = 10, search: str = "", id: int = 0) -> str:
-    uid, models = connect()
+    r = _guard(["account.move"])
+    if isinstance(r, str): return r
+    uid, models = r
     domain = build_domain([["move_type", "=", "in_invoice"]], search, record_id=id)
     bills = execute(uid, models, "account.move", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "invoice_date", "amount_total", "state", "payment_state"],
@@ -125,7 +188,9 @@ def get_vendor_bills(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 @mcp.tool()
 def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str:
-    uid, models = connect()
+    r = _guard(["sale.order", "sale.order.line", "product.product"])
+    if isinstance(r, str): return r
+    uid, models = r
     product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["list_price"]})[0]
     order_id = execute(uid, models, "sale.order", "create", [{"partner_id": partner_id}])
     execute(uid, models, "sale.order.line", "create", [{
@@ -139,7 +204,9 @@ def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str
 
 @mcp.tool()
 def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> str:
-    uid, models = connect()
+    r = _guard(["purchase.order", "purchase.order.line", "product.product"])
+    if isinstance(r, str): return r
+    uid, models = r
     product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["standard_price"]})[0]
     order_id = execute(uid, models, "purchase.order", "create", [{"partner_id": vendor_id}])
     execute(uid, models, "purchase.order.line", "create", [{
@@ -154,7 +221,9 @@ def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> s
 
 @mcp.tool()
 def create_customer_invoice(partner_id: int, product_id: int, quantity: float, price_unit: float) -> str:
-    uid, models = connect()
+    r = _guard(["account.move", "product.product"])
+    if isinstance(r, str): return r
+    uid, models = r
     product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["name"]})[0]
     invoice_id = execute(uid, models, "account.move", "create", [{
         "move_type": "out_invoice",
@@ -171,7 +240,9 @@ def create_customer_invoice(partner_id: int, product_id: int, quantity: float, p
 
 @mcp.tool()
 def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_unit: float) -> str:
-    uid, models = connect()
+    r = _guard(["account.move", "product.product"])
+    if isinstance(r, str): return r
+    uid, models = r
     product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["name"]})[0]
     bill_id = execute(uid, models, "account.move", "create", [{
         "move_type": "in_invoice",
@@ -188,7 +259,9 @@ def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_u
 
 @mcp.tool()
 def confirm_sales_order(order_id: int) -> str:
-    uid, models = connect()
+    r = _guard(["sale.order"])
+    if isinstance(r, str): return r
+    uid, models = r
     execute(uid, models, "sale.order", "button_confirm", [[order_id]])
     order = execute(uid, models, "sale.order", "read", [[order_id]], {"fields": ["id", "name", "state"]})[0]
     return json.dumps({"order_id": order_id, "name": order["name"], "state": order["state"]})
@@ -196,7 +269,9 @@ def confirm_sales_order(order_id: int) -> str:
 
 @mcp.tool()
 def register_payment(invoice_id: int, amount: float) -> str:
-    uid, models = connect()
+    r = _guard(["account.move", "account.payment"])
+    if isinstance(r, str): return r
+    uid, models = r
     invoice = execute(uid, models, "account.move", "read", [[invoice_id]], {"fields": ["id", "partner_id", "move_type"]})[0]
     is_outbound = invoice["move_type"] == "in_invoice"
     payment_id = execute(uid, models, "account.payment", "create", [{
@@ -211,7 +286,9 @@ def register_payment(invoice_id: int, amount: float) -> str:
 
 @mcp.tool()
 def update_sales_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
-    uid, models = connect()
+    r = _guard(["sale.order"])
+    if isinstance(r, str): return r
+    uid, models = r
     updates = {}
     if partner_id is not None:
         updates["partner_id"] = partner_id
@@ -225,7 +302,9 @@ def update_sales_order(order_id: int, partner_id: int = None, notes: str = None)
 
 @mcp.tool()
 def update_purchase_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
-    uid, models = connect()
+    r = _guard(["purchase.order"])
+    if isinstance(r, str): return r
+    uid, models = r
     updates = {}
     if partner_id is not None:
         updates["partner_id"] = partner_id
@@ -239,7 +318,9 @@ def update_purchase_order(order_id: int, partner_id: int = None, notes: str = No
 
 @mcp.tool()
 def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -> str:
-    uid, models = connect()
+    r = _guard(["account.move"])
+    if isinstance(r, str): return r
+    uid, models = r
     updates = {}
     if partner_id is not None:
         updates["partner_id"] = partner_id
