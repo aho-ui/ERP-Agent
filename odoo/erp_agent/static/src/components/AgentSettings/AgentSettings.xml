@@ -36,6 +36,9 @@
                         <button t-on-click="toggleLogs">
                             <i class="fa fa-terminal"/> Logs
                         </button>
+                        <button t-on-click="openOdoo">
+                            <i class="fa fa-database"/> Odoo
+                        </button>
                         <button t-on-click="openCreate">
                             <i class="fa fa-plus"/> Create
                         </button>
@@ -47,6 +50,39 @@
                                 class="is-danger">
                             <i class="fa fa-trash"/> Delete
                         </button>
+                    </div>
+                </t>
+
+                <t t-if="state.mode === 'odoo'">
+                    <div class="o_agent_settings_field">
+                        <label>Odoo URL</label>
+                        <input type="text" t-model="state.odoo.url" placeholder="http://localhost:8069"/>
+                    </div>
+                    <div class="o_agent_settings_field">
+                        <label>Database</label>
+                        <input type="text" t-model="state.odoo.db"/>
+                    </div>
+                    <div class="o_agent_settings_field">
+                        <label>User</label>
+                        <input type="text" t-model="state.odoo.user" placeholder="admin or email"/>
+                    </div>
+                    <div class="o_agent_settings_field">
+                        <label>
+                            Password
+                            <span t-if="state.odoo.hasPassword" class="o_agent_settings_hint">
+                                (leave blank to keep)
+                            </span>
+                        </label>
+                        <input type="password" t-model="state.odoo.password"/>
+                    </div>
+                    <div class="o_agent_settings_actions">
+                        <button class="o_agent_settings_save"
+                                t-on-click="saveOdoo"
+                                t-att-disabled="state.busy">
+                            <t t-if="state.busy">Saving...</t>
+                            <t t-else="">Save</t>
+                        </button>
+                        <button t-on-click="cancelForm">Cancel</button>
                     </div>
                 </t>
 

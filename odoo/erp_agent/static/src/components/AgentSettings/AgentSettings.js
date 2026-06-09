@@ -9,9 +9,10 @@ export class AgentSettings extends Component {
         this.state = useState({
             profiles: [],
             models: [],
-            mode: "list",          // "list" | "form"
+            mode: "list",          // "list" | "form" | "odoo"
             formMode: "create",    // "create" | "edit"
             form: { id: "", name: "", model: "", apiKey: "" },
+            odoo: { url: "", db: "", user: "", password: "", hasPassword: false },
             showLogs: false,
             logs: [],
             running: false,
@@ -100,6 +101,55 @@ export class AgentSettings extends Component {
             if (res?.ok && res.profile) {
                 await this.loadProfiles();
                 this.props.onSelectProfile(res.profile.id);
+                this.state.mode = "list";
+            } else {
+                this.state.error = "Save failed.";
+            }
+        } catch (e) {
+            this.state.error = e.message;
+        } finally {
+            this.state.busy = false;
+        }
+    }
+
+    async openOdoo() {
+        this.state.error = "";
+        try {
+            const res = await this._rpc("/erp_agent/odoo_backend", { action: "get" });
+            this.state.odoo = {
+                url: res?.url || "",
+                db: res?.db || "",
+                user: res?.user || "",
+                password: "",
+                hasPassword: !!res?.has_password,
+            };
+            this.state.mode = "odoo";
+        } catch (e) {
+            this.state.error = e.message;
+        }
+    }
+
+    async saveOdoo() {
+        const o = this.state.odoo;
+        if (!o.url.trim() || !o.db.trim() || !o.user.trim()) {
+            this.state.error = "URL, DB and User are required.";
+            return;
+        }
+        if (!o.hasPassword && !o.password.trim()) {
+            this.state.error = "Password is required.";
+            return;
+        }
+        this.state.busy = true;
+        this.state.error = "";
+        try {
+            const res = await this._rpc("/erp_agent/odoo_backend", {
+                action: "save",
+                url: o.url,
+                db: o.db,
+                user: o.user,
+                password: o.password,
+            });
+            if (res?.ok) {
                 this.state.mode = "list";
             } else {
                 this.state.error = "Save failed.";
