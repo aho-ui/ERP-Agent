@@ -60,10 +60,6 @@ def start():
                 django.setup()
             _record("INFO", "django setup complete")
 
-            from django.core.management import call_command
-            call_command("migrate", verbosity=0)
-            _record("INFO", "migrations applied")
-
             from backend.mcp_servers.seed import ensure_seeded
             ensure_seeded()
             _record("INFO", "demo.db ready")

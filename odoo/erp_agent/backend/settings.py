@@ -20,10 +20,7 @@ DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
-    "django.contrib.contenttypes",
-    "django.contrib.auth",
     "corsheaders",
-    "backend.chat",
 ]
 
 MIDDLEWARE = [
