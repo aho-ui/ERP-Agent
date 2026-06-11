@@ -82,6 +82,34 @@ def _guard(needed: list[str]):
     return uid, models
 
 
+# active connection — set by @needs before invoking the tool body, read by the
+# body via `ctx.uid` / `ctx.models`. Single-threaded MCP subprocess so a module
+# global is safe.
+class _Ctx:
+    uid = None
+    models = None
+
+
+ctx = _Ctx()
+
+
+def needs(models_needed: list[str]):
+    """Decorator: guard the listed Odoo models, set ctx.{uid,models}, then call the body.
+    Returns a JSON error if any model is missing. Keeps the LLM-visible signature clean."""
+    import functools
+
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            r = _guard(models_needed)
+            if isinstance(r, str):
+                return r
+            ctx.uid, ctx.models = r
+            return fn(*args, **kwargs)
+        return wrapper
+    return deco
+
+
 def build_domain(base: list, search: str, field: str = "name", record_id: int = 0) -> list:
     domain = base[:]
     if record_id:
@@ -92,12 +120,10 @@ def build_domain(base: list, search: str, field: str = "name", record_id: int = 
 
 
 @mcp.tool()
+@needs(["sale.order"])
 def get_sales_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
-    r = _guard(["sale.order"])
-    if isinstance(r, str): return r
-    uid, models = r
     domain = build_domain([], search, record_id=id)
-    orders = execute(uid, models, "sale.order", "search_read", domain, {
+    orders = execute(ctx.uid, ctx.models, "sale.order", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "date_order", "amount_total", "state"],
         "limit": limit,
         "order": "date_order desc",
@@ -106,12 +132,10 @@ def get_sales_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
+@needs(["res.partner"])
 def get_customers(limit: int = 10, search: str = "", id: int = 0) -> str:
-    r = _guard(["res.partner"])
-    if isinstance(r, str): return r
-    uid, models = r
     domain = build_domain([["is_company", "=", True]], search, record_id=id)
-    customers = execute(uid, models, "res.partner", "search_read", domain, {
+    customers = execute(ctx.uid, ctx.models, "res.partner", "search_read", domain, {
         "fields": ["id", "name", "email", "phone", "customer_rank"],
         "limit": limit,
     })
@@ -119,12 +143,10 @@ def get_customers(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
+@needs(["res.partner"])
 def get_vendors(limit: int = 10, search: str = "", id: int = 0) -> str:
-    r = _guard(["res.partner"])
-    if isinstance(r, str): return r
-    uid, models = r
     domain = build_domain([["supplier_rank", ">", 0]], search, record_id=id)
-    vendors = execute(uid, models, "res.partner", "search_read", domain, {
+    vendors = execute(ctx.uid, ctx.models, "res.partner", "search_read", domain, {
         "fields": ["id", "name", "email", "phone", "supplier_rank"],
         "limit": limit,
     })
@@ -132,12 +154,10 @@ def get_vendors(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
+@needs(["product.product"])
 def get_products(limit: int = 10, search: str = "", id: int = 0) -> str:
-    r = _guard(["product.product"])
-    if isinstance(r, str): return r
-    uid, models = r
     domain = build_domain([["sale_ok", "=", True]], search, record_id=id)
-    products = execute(uid, models, "product.product", "search_read", domain, {
+    products = execute(ctx.uid, ctx.models, "product.product", "search_read", domain, {
         "fields": ["id", "name", "list_price", "standard_price", "type", "default_code"],
         "limit": limit,
     })
@@ -145,12 +165,10 @@ def get_products(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
+@needs(["purchase.order"])
 def get_purchase_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
-    r = _guard(["purchase.order"])
-    if isinstance(r, str): return r
-    uid, models = r
     domain = build_domain([], search, record_id=id)
-    orders = execute(uid, models, "purchase.order", "search_read", domain, {
+    orders = execute(ctx.uid, ctx.models, "purchase.order", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "date_order", "amount_total", "state"],
         "limit": limit,
         "order": "date_order desc",
@@ -159,12 +177,10 @@ def get_purchase_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
+@needs(["account.move"])
 def get_invoices(limit: int = 10, search: str = "", id: int = 0) -> str:
-    r = _guard(["account.move"])
-    if isinstance(r, str): return r
-    uid, models = r
     domain = build_domain([["move_type", "=", "out_invoice"]], search, record_id=id)
-    invoices = execute(uid, models, "account.move", "search_read", domain, {
+    invoices = execute(ctx.uid, ctx.models, "account.move", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "invoice_date", "amount_total", "state", "payment_state"],
         "limit": limit,
         "order": "invoice_date desc",
@@ -173,12 +189,10 @@ def get_invoices(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
+@needs(["account.move"])
 def get_vendor_bills(limit: int = 10, search: str = "", id: int = 0) -> str:
-    r = _guard(["account.move"])
-    if isinstance(r, str): return r
-    uid, models = r
     domain = build_domain([["move_type", "=", "in_invoice"]], search, record_id=id)
-    bills = execute(uid, models, "account.move", "search_read", domain, {
+    bills = execute(ctx.uid, ctx.models, "account.move", "search_read", domain, {
         "fields": ["id", "name", "partner_id", "invoice_date", "amount_total", "state", "payment_state"],
         "limit": limit,
         "order": "invoice_date desc",
@@ -187,13 +201,11 @@ def get_vendor_bills(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
+@needs(["sale.order", "sale.order.line", "product.product"])
 def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str:
-    r = _guard(["sale.order", "sale.order.line", "product.product"])
-    if isinstance(r, str): return r
-    uid, models = r
-    product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["list_price"]})[0]
-    order_id = execute(uid, models, "sale.order", "create", [{"partner_id": partner_id}])
-    execute(uid, models, "sale.order.line", "create", [{
+    product = execute(ctx.uid, ctx.models, "product.product", "read", [[product_id]], {"fields": ["list_price"]})[0]
+    order_id = execute(ctx.uid, ctx.models, "sale.order", "create", [{"partner_id": partner_id}])
+    execute(ctx.uid, ctx.models, "sale.order.line", "create", [{
         "order_id": order_id,
         "product_id": product_id,
         "product_uom_qty": quantity,
@@ -203,29 +215,25 @@ def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str
 
 
 @mcp.tool()
+@needs(["purchase.order", "purchase.order.line", "product.product"])
 def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> str:
-    r = _guard(["purchase.order", "purchase.order.line", "product.product"])
-    if isinstance(r, str): return r
-    uid, models = r
-    product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["standard_price"]})[0]
-    order_id = execute(uid, models, "purchase.order", "create", [{"partner_id": vendor_id}])
-    execute(uid, models, "purchase.order.line", "create", [{
+    product = execute(ctx.uid, ctx.models, "product.product", "read", [[product_id]], {"fields": ["standard_price"]})[0]
+    order_id = execute(ctx.uid, ctx.models, "purchase.order", "create", [{"partner_id": vendor_id}])
+    execute(ctx.uid, ctx.models, "purchase.order.line", "create", [{
         "order_id": order_id,
         "product_id": product_id,
         "product_qty": quantity,
         "price_unit": product["standard_price"],
     }])
-    execute(uid, models, "purchase.order", "button_confirm", [[order_id]])
+    execute(ctx.uid, ctx.models, "purchase.order", "button_confirm", [[order_id]])
     return json.dumps({"order_id": order_id})
 
 
 @mcp.tool()
+@needs(["account.move", "product.product"])
 def create_customer_invoice(partner_id: int, product_id: int, quantity: float, price_unit: float) -> str:
-    r = _guard(["account.move", "product.product"])
-    if isinstance(r, str): return r
-    uid, models = r
-    product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["name"]})[0]
-    invoice_id = execute(uid, models, "account.move", "create", [{
+    product = execute(ctx.uid, ctx.models, "product.product", "read", [[product_id]], {"fields": ["name"]})[0]
+    invoice_id = execute(ctx.uid, ctx.models, "account.move", "create", [{
         "move_type": "out_invoice",
         "partner_id": partner_id,
         "invoice_line_ids": [(0, 0, {
@@ -234,17 +242,15 @@ def create_customer_invoice(partner_id: int, product_id: int, quantity: float, p
             "price_unit": price_unit,
         })],
     }])
-    execute(uid, models, "account.move", "action_post", [[invoice_id]])
+    execute(ctx.uid, ctx.models, "account.move", "action_post", [[invoice_id]])
     return json.dumps({"invoice_id": invoice_id})
 
 
 @mcp.tool()
+@needs(["account.move", "product.product"])
 def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_unit: float) -> str:
-    r = _guard(["account.move", "product.product"])
-    if isinstance(r, str): return r
-    uid, models = r
-    product = execute(uid, models, "product.product", "read", [[product_id]], {"fields": ["name"]})[0]
-    bill_id = execute(uid, models, "account.move", "create", [{
+    product = execute(ctx.uid, ctx.models, "product.product", "read", [[product_id]], {"fields": ["name"]})[0]
+    bill_id = execute(ctx.uid, ctx.models, "account.move", "create", [{
         "move_type": "in_invoice",
         "partner_id": vendor_id,
         "invoice_line_ids": [(0, 0, {
@@ -253,42 +259,36 @@ def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_u
             "price_unit": price_unit,
         })],
     }])
-    execute(uid, models, "account.move", "action_post", [[bill_id]])
+    execute(ctx.uid, ctx.models, "account.move", "action_post", [[bill_id]])
     return json.dumps({"bill_id": bill_id})
 
 
 @mcp.tool()
+@needs(["sale.order"])
 def confirm_sales_order(order_id: int) -> str:
-    r = _guard(["sale.order"])
-    if isinstance(r, str): return r
-    uid, models = r
-    execute(uid, models, "sale.order", "button_confirm", [[order_id]])
-    order = execute(uid, models, "sale.order", "read", [[order_id]], {"fields": ["id", "name", "state"]})[0]
+    execute(ctx.uid, ctx.models, "sale.order", "button_confirm", [[order_id]])
+    order = execute(ctx.uid, ctx.models, "sale.order", "read", [[order_id]], {"fields": ["id", "name", "state"]})[0]
     return json.dumps({"order_id": order_id, "name": order["name"], "state": order["state"]})
 
 
 @mcp.tool()
+@needs(["account.move", "account.payment"])
 def register_payment(invoice_id: int, amount: float) -> str:
-    r = _guard(["account.move", "account.payment"])
-    if isinstance(r, str): return r
-    uid, models = r
-    invoice = execute(uid, models, "account.move", "read", [[invoice_id]], {"fields": ["id", "partner_id", "move_type"]})[0]
+    invoice = execute(ctx.uid, ctx.models, "account.move", "read", [[invoice_id]], {"fields": ["id", "partner_id", "move_type"]})[0]
     is_outbound = invoice["move_type"] == "in_invoice"
-    payment_id = execute(uid, models, "account.payment", "create", [{
+    payment_id = execute(ctx.uid, ctx.models, "account.payment", "create", [{
         "amount": amount,
         "partner_id": invoice["partner_id"][0],
         "payment_type": "outbound" if is_outbound else "inbound",
         "partner_type": "vendor" if is_outbound else "customer",
     }])
-    execute(uid, models, "account.payment", "action_post", [[payment_id]])
+    execute(ctx.uid, ctx.models, "account.payment", "action_post", [[payment_id]])
     return json.dumps({"payment_id": payment_id, "amount": amount})
 
 
 @mcp.tool()
+@needs(["sale.order"])
 def update_sales_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
-    r = _guard(["sale.order"])
-    if isinstance(r, str): return r
-    uid, models = r
     updates = {}
     if partner_id is not None:
         updates["partner_id"] = partner_id
@@ -296,15 +296,13 @@ def update_sales_order(order_id: int, partner_id: int = None, notes: str = None)
         updates["note"] = notes
     if not updates:
         return json.dumps({"error": "No fields to update"})
-    execute(uid, models, "sale.order", "write", [[order_id], updates])
+    execute(ctx.uid, ctx.models, "sale.order", "write", [[order_id], updates])
     return json.dumps({"order_id": order_id, "updated_fields": list(updates.keys())})
 
 
 @mcp.tool()
+@needs(["purchase.order"])
 def update_purchase_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
-    r = _guard(["purchase.order"])
-    if isinstance(r, str): return r
-    uid, models = r
     updates = {}
     if partner_id is not None:
         updates["partner_id"] = partner_id
@@ -312,15 +310,13 @@ def update_purchase_order(order_id: int, partner_id: int = None, notes: str = No
         updates["note"] = notes
     if not updates:
         return json.dumps({"error": "No fields to update"})
-    execute(uid, models, "purchase.order", "write", [[order_id], updates])
+    execute(ctx.uid, ctx.models, "purchase.order", "write", [[order_id], updates])
     return json.dumps({"order_id": order_id, "updated_fields": list(updates.keys())})
 
 
 @mcp.tool()
+@needs(["account.move"])
 def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -> str:
-    r = _guard(["account.move"])
-    if isinstance(r, str): return r
-    uid, models = r
     updates = {}
     if partner_id is not None:
         updates["partner_id"] = partner_id
@@ -328,7 +324,7 @@ def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -
         updates["narration"] = notes
     if not updates:
         return json.dumps({"error": "No fields to update"})
-    execute(uid, models, "account.move", "write", [[invoice_id], updates])
+    execute(ctx.uid, ctx.models, "account.move", "write", [[invoice_id], updates])
     return json.dumps({"invoice_id": invoice_id, "updated_fields": list(updates.keys())})
 
 
