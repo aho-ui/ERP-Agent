@@ -19,7 +19,9 @@ class AgentsController(http.Controller):
     def agent(self, action="list", **kw):
         _ensure_path()
         from backend.agents.registry import AgentRegistry
-        Agent = request.env["erp_agent.agent"].sudo()
+        # NO sudo: record rule scopes reads/writes to the requesting user's agents.
+        # user_id defaults to env.user on create (see models/agent.py).
+        Agent = request.env["erp_agent.agent"]
 
         if action == "list":
             _warm_agents(request.env)

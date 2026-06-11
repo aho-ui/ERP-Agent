@@ -1,5 +1,6 @@
 /** @odoo-module **/
 import { Component, useState, markup, onWillStart, useRef, useEffect } from "@odoo/owl";
+import { session } from "@web/session";
 
 const BACKEND_URL = "http://localhost:8001/";
 const CONV_URL = "/erp_agent/conversation";
@@ -182,6 +183,7 @@ export class ErpAgentChat extends Component {
                     message: text,
                     session_key: `odoo:conv:${conv.id}`,
                     profile_id: this.props.profileId || "",
+                    uid: session.user_id || null,
                 }),
                 signal: this._abortCtrl.signal,
             });

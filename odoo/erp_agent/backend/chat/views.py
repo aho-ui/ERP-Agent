@@ -44,7 +44,9 @@ async def chat(request):
     # per-conversation working memory. Persistence lives in Odoo, not here.
     session_key = body.get("session_key", "odoo:default")
     profile_id = body.get("profile_id")
-    set_context(user_role="admin", run_id=str(uuid.uuid4()), source="odoo", profile_id=profile_id)
+    uid = body.get("uid")
+    user_id = str(uid) if uid is not None else None
+    set_context(user_role="admin", user_id=user_id, run_id=str(uuid.uuid4()), source="odoo", profile_id=profile_id)
 
     queue = CollectingQueue()
 

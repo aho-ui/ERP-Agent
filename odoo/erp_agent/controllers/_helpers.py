@@ -107,8 +107,9 @@ def _save_disabled_defaults(env, names):
 
 def _warm_agents(env):
     from backend.agents.registry import AgentRegistry
+    # NO sudo: record rule scopes this to the requesting user's agents.
     # active customs only (default search hides inactive)
-    recs = env["erp_agent.agent"].sudo().search([])
+    recs = env["erp_agent.agent"].search([])
     AgentRegistry.set_state(
         custom=[
             {
