@@ -5,3 +5,5 @@ from . import activity
 from . import tools
 from . import odoo_backend
 from . import agents
+from . import chat
+from . import internal

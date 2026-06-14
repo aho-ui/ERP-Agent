@@ -1,8 +1,9 @@
 /** @odoo-module **/
 import { Component, useState, markup, onWillStart, useRef, useEffect } from "@odoo/owl";
-import { session } from "@web/session";
+// import { session } from "@web/session";  // uid is now taken server-side from request.env.user
 
-const BACKEND_URL = "http://localhost:8001/";
+// const BACKEND_URL = "http://localhost:8001/";  // chat now routes through Odoo for per-user bundle
+const CHAT_URL = "/erp_agent/chat";
 const CONV_URL = "/erp_agent/conversation";
 
 const TOOL_RE = /-> (mcp_\w+)\(/;
@@ -176,14 +177,13 @@ export class ErpAgentChat extends Component {
         const tables = [];
         let answer = "";
         try {
-            const resp = await fetch(`${BACKEND_URL}chat/`, {
+            const resp = await fetch(CHAT_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     message: text,
                     session_key: `odoo:conv:${conv.id}`,
                     profile_id: this.props.profileId || "",
-                    uid: session.user_id || null,
                 }),
                 signal: this._abortCtrl.signal,
             });

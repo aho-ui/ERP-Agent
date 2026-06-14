@@ -9,7 +9,10 @@ from django.views.decorators.http import require_POST
 from loguru import logger
 
 # from backend.agent_loop import get_agent_loop, set_context, _task_queues
-from backend.agent_loop import get_agent_loop, set_context, _task_queues, _accepting
+from backend.agent_loop import (
+    get_agent_loop, set_context, _task_queues, _accepting,
+    top_level_lock, sync_provider,
+)
 from backend.utils.streaming import stream_queue
 from backend.utils.queue import CollectingQueue
 
@@ -43,10 +46,23 @@ async def chat(request):
     # session_key is the conversation key (odoo:conv:<id>) — drives nanobot's
     # per-conversation working memory. Persistence lives in Odoo, not here.
     session_key = body.get("session_key", "odoo:default")
-    profile_id = body.get("profile_id")
     uid = body.get("uid")
     user_id = str(uid) if uid is not None else None
-    set_context(user_role="admin", user_id=user_id, run_id=str(uuid.uuid4()), source="odoo", profile_id=profile_id)
+    agents = body.get("agents")
+    disabled_defaults = body.get("disabled_defaults")
+    profile = body.get("profile")
+    enabled_mcps = body.get("enabled_mcps")
+    set_context(
+        user_role="admin",
+        user_id=user_id,
+        run_id=str(uuid.uuid4()),
+        source="odoo",
+        profile_id=(profile or {}).get("id") if profile else None,
+        agents=agents,
+        disabled_defaults=disabled_defaults,
+        profile=profile,
+        enabled_mcps=enabled_mcps,
+    )
 
     queue = CollectingQueue()
 
@@ -56,11 +72,15 @@ async def chat(request):
     async def run_agent():
         try:
             agent_loop = get_agent_loop()
-            response = await agent_loop.process_direct(
-                content=message,
-                session_key=session_key,
-                on_progress=on_progress,
-            )
+            # serialize top-level provider mutation + the top-level LLM call so
+            # concurrent users can't read each other's loop.provider/loop.model
+            async with top_level_lock:
+                sync_provider(agent_loop)
+                response = await agent_loop.process_direct(
+                    content=message,
+                    session_key=session_key,
+                    on_progress=on_progress,
+                )
             await queue.put({"type": "response", "content": response})
         except Exception as e:
             logger.error(f"[agent] {e}")

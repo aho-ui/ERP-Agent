@@ -8,7 +8,7 @@ from nanobot.agent.tools.base import Tool
 
 from backend.parsing import parse_agent_response
 from backend.agents.registry import AgentRegistry
-from backend import profiles as _profiles
+# from backend import profiles as _profiles  # daemon no longer reads cache — profile lives on ctx
 
 _TOOL_TIMEOUT = 60
 
@@ -75,10 +75,7 @@ class SubAgentRunner:
         self._emitter.dispatch_start(agent_name)
 
         ctx = _main().get_context()
-        active = _profiles.get(ctx.profile_id) if ctx.profile_id else None
-        if active is None:
-            allp = _profiles.list_profiles()
-            active = allp[0] if allp else {}
+        active = ctx.profile or {}
         model = active.get("model") or self._model
         api_key = active.get("api_key") or None
 

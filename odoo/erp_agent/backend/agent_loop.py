@@ -1,5 +1,5 @@
 import asyncio
-import os
+# import os  # no longer needed — env-var mutation removed with _apply_env
 
 from loguru import logger
 from nanobot.agent.loop import AgentLoop
@@ -13,12 +13,13 @@ from backend.agents.main import (
 )
 # from backend.health import healthy_servers   # moved to monitor; loop no longer filters
 from backend.mcp import SERVERS
-from backend import profiles
+# from backend import profiles  # daemon no longer caches; profile lives on ctx (per-request bundle)
 
 __all__ = [
     "AgentContext", "get_context", "set_context", "_task_queues",
     "get_agent_loop", "apply_runtime_config", "rebuild", "_accepting",
     "set_daemon_loop", "trigger_rebuild_from_thread",
+    "top_level_lock", "sync_provider", "wrap_mcp_tools",
 ]
 
 _daemon_loop: asyncio.AbstractEventLoop | None = None
@@ -58,52 +59,91 @@ async def rebuild() -> None:
     agent._mcp_connected = False
     agent._mcp_stack = None
     await agent._connect_mcp()
+    wrap_mcp_tools(agent)
     _accepting.set()
     logger.info("[agent_loop] rebuild complete")
 
 
-_ENV_KEY_MAP = {
-    "groq": "GROQ_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-}
+# _ENV_KEY_MAP = {
+#     "groq": "GROQ_API_KEY",
+#     "openai": "OPENAI_API_KEY",
+#     "anthropic": "ANTHROPIC_API_KEY",
+#     "deepseek": "DEEPSEEK_API_KEY",
+#     "openrouter": "OPENROUTER_API_KEY",
+# }
 
 
-def _apply_env(profile: dict | None) -> None:
-    if not profile:
-        return
-    api_key = profile.get("api_key") or ""
-    model = profile.get("model") or ""
-    if api_key and model:
-        env_var = _ENV_KEY_MAP.get(model.split("/", 1)[0])
-        if env_var:
-            os.environ[env_var] = api_key
+# def _apply_env(profile: dict | None) -> None:
+#     # dropped: per-call api_key is now passed directly to litellm.acompletion via ctx.profile,
+#     # so mutating process-global env vars is both unnecessary and racy under multi-user load.
+#     if not profile:
+#         return
+#     api_key = profile.get("api_key") or ""
+#     model = profile.get("model") or ""
+#     if api_key and model:
+#         env_var = _ENV_KEY_MAP.get(model.split("/", 1)[0])
+#         if env_var:
+#             os.environ[env_var] = api_key
 
 
 def apply_runtime_config(profile_id: str | None = None) -> None:
-    _apply_env(profiles.get(profile_id) if profile_id else None)
-
-    # global _agent_loop
-    # _agent_loop = None
-    logger.info("[agent_loop] runtime config applied")
+    # kept as a no-op for callers in controllers; profile now travels per-request via ctx
+    logger.info("[agent_loop] runtime config applied (noop — bundle path)")
 
 
 def _active_profile() -> dict | None:
+    # reads from per-request ctx (set by chat/views.py from the bundle)
     ctx = get_context()
-    active = profiles.get(ctx.profile_id) if ctx.profile_id else None
-    if active is None:
-        allp = profiles.list_profiles()
-        active = allp[0] if allp else None
-    return active
+    return ctx.profile or None
 
 
-def _sync_provider(loop: AgentLoop) -> None:
+# serializes top-level loop.provider mutation across concurrent chat requests.
+# the sub-agent path is race-free (each call passes api_key/model directly to
+# litellm.acompletion via ctx.profile). only the top-level dispatch picker
+# needs the loop's provider, and that's what this lock protects.
+top_level_lock = asyncio.Lock()
+
+
+def wrap_mcp_tools(loop: AgentLoop) -> None:
+    # inject `_auth_token` into every mcp_odoo_* tool call. token is signed by
+    # the daemon with the gateway secret and carries the current ctx.user_id.
+    # MCP forwards it verbatim to Odoo's /internal/execute, which scopes the ORM
+    # call to that user via env.with_user. sqlite tools are not wrapped — demo
+    # data, no per-user isolation needed.
+    import json as _json
+    from backend.gateway import sign as _sign
+    from backend.agents.main import get_context as _get_ctx
+
+    for name in list(loop.tools.tool_names):
+        if not name.startswith("mcp_odoo_"):
+            continue
+        tool = loop.tools.get(name)
+        if tool is None or getattr(tool, "_erp_wrapped", False):
+            continue
+        original_execute = tool.execute
+        op_name = name[len("mcp_odoo_"):]
+
+        async def _wrapped(__orig=original_execute, __op=op_name, **kwargs):
+            ctx = _get_ctx()
+            uid = ctx.user_id
+            if uid is None:
+                return _json.dumps({"error": "no user context for mcp_odoo call"})
+            try:
+                uid_int = int(uid)
+            except (TypeError, ValueError):
+                return _json.dumps({"error": f"invalid uid in context: {uid!r}"})
+            kwargs["_auth_token"] = _sign({"uid": uid_int, "op": __op})
+            return await __orig(**kwargs)
+
+        tool.execute = _wrapped
+        tool._erp_wrapped = True
+        logger.info(f"[agent_loop] wrapped {name} with gateway token injection")
+
+
+def sync_provider(loop: AgentLoop) -> None:
     active = _active_profile()
     if not active or not active.get("model"):
         return
-    _apply_env(active)
     model = active["model"]
     key = active.get("api_key") or None
     if getattr(loop, "_erp_profile", None) == (model, key):
@@ -131,17 +171,7 @@ logger.add(_tool_call_sink, level="INFO", format="{message}")
 def get_agent_loop() -> AgentLoop:
     global _agent_loop
     if _agent_loop is None:
-        active = _active_profile()
-        _apply_env(active)
-
         config, provider = load()
-        if active and active.get("model"):
-            config.agents.defaults.model = active["model"]
-            provider = LiteLLMProvider(
-                api_key=active.get("api_key") or None,
-                api_base=None,
-                default_model=active["model"],
-            )
 
         bus = MessageBus()
         workspace = config.workspace_path
@@ -176,5 +206,6 @@ def get_agent_loop() -> AgentLoop:
             d for d in _orig_defs() if d["function"]["name"] == "dispatch"
         ]
 
-    _sync_provider(_agent_loop)
+    # do NOT mutate here — top-level provider sync happens inside chat/views.py
+    # under top_level_lock so concurrent requests don't race the mutation.
     return _agent_loop

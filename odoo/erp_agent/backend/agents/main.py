@@ -13,6 +13,10 @@ class AgentContext:
     source: str = "odoo"
     bot_id: str | None = None
     profile_id: str | None = None
+    agents: list[dict] | None = None
+    disabled_defaults: list[str] | None = None
+    profile: dict | None = None
+    enabled_mcps: list[str] | None = None
 
 
 _ctx: ContextVar[AgentContext] = ContextVar("agent_ctx", default=AgentContext())

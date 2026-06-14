@@ -4,7 +4,13 @@ from datetime import datetime, timedelta
 from odoo import fields, http
 from odoo.http import request
 
-from ._helpers import _CALL_LINE_RE, _RESULT_LINE_RE, _ensure_path, _warm_agents
+from ._helpers import (
+    _CALL_LINE_RE,
+    _RESULT_LINE_RE,
+    _agent_dict,
+    _disabled_defaults,
+    _ensure_path,
+)
 
 
 class ToolsController(http.Controller):
@@ -41,10 +47,20 @@ class ToolsController(http.Controller):
                     "params": params,
                 }
 
-        # which agents allow each tool (defaults + active customs, via registry)
-        _warm_agents(request.env)
+        # which agents allow each tool (defaults + active customs, read directly from Odoo)
+        # _warm_agents(request.env)
+        # tool_agents: dict = {}
+        # for ag in AgentRegistry.all():
+        #     for tname in ag.get("allowed_tools") or []:
+        #         tool_agents.setdefault(tname, []).append(ag["name"])
+        disabled = set(_disabled_defaults(request.env))
+        defaults = [a for a in AgentRegistry._defaults_raw() if a["name"] not in disabled]
+        customs = [_agent_dict(r) for r in request.env["erp_agent.agent"].search([])]
+        by_name = {a["name"]: a for a in defaults}
+        for a in customs:
+            by_name[a["name"]] = a
         tool_agents: dict = {}
-        for ag in AgentRegistry.all():
+        for ag in by_name.values():
             for tname in ag.get("allowed_tools") or []:
                 tool_agents.setdefault(tname, []).append(ag["name"])
 

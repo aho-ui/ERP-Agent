@@ -3,6 +3,8 @@ from typing import Literal
 
 import yaml
 
+from backend.agents.main import get_context
+
 _TEMPLATES_PATH = Path(__file__).resolve().parent / "templates.yaml"
 
 _Status = Literal["ok", "not_found"]
@@ -10,21 +12,21 @@ _Status = Literal["ok", "not_found"]
 
 class AgentRegistry:
     _cache: list[dict] | None = None
-    _custom: list[dict] = []                  # active customs (warmed by controller)
-    _disabled_defaults: set[str] = set()      # default agent names turned OFF globally
+    # _custom: list[dict] = []                  # active customs (warmed by controller)
+    # _disabled_defaults: set[str] = set()      # default agent names turned OFF globally
 
     @classmethod
     def invalidate(cls) -> None:
         cls._cache = None
 
-    @classmethod
-    def set_state(cls, custom: list[dict], disabled_defaults: list[str]) -> None:
-        cls._custom = custom or []
-        cls._disabled_defaults = set(disabled_defaults or [])
+    # @classmethod
+    # def set_state(cls, custom: list[dict], disabled_defaults: list[str]) -> None:
+    #     cls._custom = custom or []
+    #     cls._disabled_defaults = set(disabled_defaults or [])
 
-    @classmethod
-    def set_custom(cls, agents: list[dict]) -> None:
-        cls._custom = agents or []
+    # @classmethod
+    # def set_custom(cls, agents: list[dict]) -> None:
+    #     cls._custom = agents or []
 
     @classmethod
     def _defaults_raw(cls) -> list[dict]:
@@ -39,9 +41,12 @@ class AgentRegistry:
 
     @classmethod
     def all(cls) -> list[dict]:
-        defaults = [a for a in cls._defaults_raw() if a["name"] not in cls._disabled_defaults]
+        ctx = get_context()
+        custom = ctx.agents or []
+        disabled = set(ctx.disabled_defaults or [])
+        defaults = [a for a in cls._defaults_raw() if a["name"] not in disabled]
         by_name = {a["name"]: a for a in defaults}
-        for a in cls._custom:
+        for a in custom:
             by_name[a["name"]] = a   # custom overrides a default of the same name
         return list(by_name.values())
 
@@ -51,10 +56,13 @@ class AgentRegistry:
 
     @classmethod
     def available(cls, healthy: set[str]) -> list[dict]:
+        ctx = get_context()
+        enabled = set(ctx.enabled_mcps) if ctx.enabled_mcps is not None else None
+        effective = healthy & enabled if enabled is not None else healthy
         return [
             a for a in cls.all()
             if all(
-                t.split("_")[1] in healthy
+                t.split("_")[1] in effective
                 for t in a["allowed_tools"]
                 if t.startswith("mcp_")
             )

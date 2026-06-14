@@ -39,6 +39,13 @@
                                 <span class="o_erp_health_uptime"
                                       t-esc="srv.state === 2 ? formatUptime(srv.uptime) : '—'"/>
                                 <span class="o_erp_health_error" t-esc="srv.reason || '—'"/>
+                                <button class="o_erp_mcp_toggle"
+                                        t-att-class="isMcpEnabled(srv.name) ? 'o_erp_mcp_on' : 'o_erp_mcp_off'"
+                                        t-att-disabled="!state.health.is_admin"
+                                        t-on-click="() => this.toggleMcp(srv.name)"
+                                        t-att-title="state.health.is_admin ? 'Click to toggle' : 'Admin only'">
+                                    <t t-esc="isMcpEnabled(srv.name) ? 'ON' : 'OFF'"/>
+                                </button>
                             </div>
                         </t>
                         <div class="o_erp_health_chart">

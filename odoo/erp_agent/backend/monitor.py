@@ -2,7 +2,7 @@ import asyncio
 
 from loguru import logger
 
-from backend.agent_loop import get_agent_loop, rebuild
+from backend.agent_loop import get_agent_loop, rebuild, wrap_mcp_tools
 from backend.health import probe_all
 
 _INTERVAL = 30        # seconds between health ticks (e.g. 1800 = 30 min)
@@ -21,6 +21,7 @@ async def run_monitor() -> None:
     agent = get_agent_loop()
     try:
         await agent._connect_mcp()          # this task owns the MCP stack (anyio requirement)
+        wrap_mcp_tools(agent)
         prev = await probe_all(agent.tools)
         logger.info(f"[monitor] boot states: {prev}")
     finally:

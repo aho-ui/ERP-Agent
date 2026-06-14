@@ -20,4 +20,11 @@
         <field name="domain_force">[('user_id', '=', user.id)]</field>
         <field name="groups" eval="[(4, ref('base.group_user'))]"/>
     </record>
+
+    <record id="rule_erp_agent_profile_own" model="ir.rule">
+        <field name="name">erp_agent.profile: own records only</field>
+        <field name="model_id" ref="model_erp_agent_profile"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+    </record>
 </odoo>

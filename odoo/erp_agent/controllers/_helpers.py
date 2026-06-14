@@ -23,7 +23,10 @@ MODEL_PRESETS = [
     "deepseek/deepseek-chat",
 ]
 
-_DISABLED_PARAM = "erp_agent.disabled_default_agents"
+# # _DISABLED_PARAM = "erp_agent.disabled_default_agents"  # was global; now per-user on res.users.erp_agent_disabled_defaults
+
+_KNOWN_MCPS = ["odoo", "sqlite"]
+_DISABLED_MCPS_PARAM = "erp_agent.disabled_mcps"
 
 
 def _ensure_path():
@@ -40,12 +43,13 @@ def _is_running():
         return False
 
 
-def _apply_runtime_config(profile_id):
-    try:
-        from backend.agent_loop import apply_runtime_config
-        apply_runtime_config(profile_id)
-    except Exception:
-        pass
+# def _apply_runtime_config(profile_id):
+#     # unused: profile now travels in the chat bundle per request, no daemon side-effect needed.
+#     try:
+#         from backend.agent_loop import apply_runtime_config
+#         apply_runtime_config(profile_id)
+#     except Exception:
+#         pass
 
 
 def _mask(p):
@@ -93,7 +97,42 @@ def _agent_dict(r):
 
 
 def _disabled_defaults(env):
-    raw = env["ir.config_parameter"].sudo().get_param(_DISABLED_PARAM, "[]")
+    raw = env.user.erp_agent_disabled_defaults or "[]"
+    try:
+        data = json.loads(raw)
+    except Exception:
+        data = []
+    return data if isinstance(data, list) else []
+
+
+def _save_disabled_defaults(env, names):
+    env.user.sudo().write({
+        "erp_agent_disabled_defaults": json.dumps(sorted(set(names))),
+    })
+
+
+def _warm_agents(env):
+    # daemon no longer caches custom agents — bundle path supplies them per request
+    return env["erp_agent.agent"].browse([])
+    # from backend.agents.registry import AgentRegistry
+    # recs = env["erp_agent.agent"].search([])
+    # AgentRegistry.set_state(
+    #     custom=[
+    #         {
+    #             "name": d["name"],
+    #             "description": d["description"],
+    #             "system_prompt": d["system_prompt"],
+    #             "allowed_tools": d["allowed_tools"],
+    #         }
+    #         for d in (_agent_dict(r) for r in recs)
+    #     ],
+    #     disabled_defaults=_disabled_defaults(env),
+    # )
+    # return recs
+
+
+def _disabled_mcps(env):
+    raw = env["ir.config_parameter"].sudo().get_param(_DISABLED_MCPS_PARAM, "[]")
     try:
         data = json.loads(raw or "[]")
     except Exception:
@@ -101,28 +140,15 @@ def _disabled_defaults(env):
     return data if isinstance(data, list) else []
 
 
-def _save_disabled_defaults(env, names):
-    env["ir.config_parameter"].sudo().set_param(_DISABLED_PARAM, json.dumps(sorted(set(names))))
-
-
-def _warm_agents(env):
-    from backend.agents.registry import AgentRegistry
-    # NO sudo: record rule scopes this to the requesting user's agents.
-    # active customs only (default search hides inactive)
-    recs = env["erp_agent.agent"].search([])
-    AgentRegistry.set_state(
-        custom=[
-            {
-                "name": d["name"],
-                "description": d["description"],
-                "system_prompt": d["system_prompt"],
-                "allowed_tools": d["allowed_tools"],
-            }
-            for d in (_agent_dict(r) for r in recs)
-        ],
-        disabled_defaults=_disabled_defaults(env),
+def _save_disabled_mcps(env, names):
+    env["ir.config_parameter"].sudo().set_param(
+        _DISABLED_MCPS_PARAM, json.dumps(sorted(set(names)))
     )
-    return recs
+
+
+def _enabled_mcps(env):
+    disabled = set(_disabled_mcps(env))
+    return [m for m in _KNOWN_MCPS if m not in disabled]
 
 
 def _available_tool_names():

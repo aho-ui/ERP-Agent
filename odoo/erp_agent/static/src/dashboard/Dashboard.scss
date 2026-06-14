@@ -107,7 +107,7 @@
 
 .o_erp_health_row {
     display: grid;
-    grid-template-columns: 14px 150px 90px 110px 1fr;
+    grid-template-columns: 14px 150px 90px 110px 1fr 60px;
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
@@ -139,6 +139,25 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.o_erp_mcp_toggle {
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    justify-self: end;
+
+    &.o_erp_mcp_on  { background: #28a745; color: white; }
+    &.o_erp_mcp_off { background: #d0d0d0; color: #555; }
+
+    &:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+    }
 }
 
 .o_erp_health_chart {

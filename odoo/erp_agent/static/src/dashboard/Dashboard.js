@@ -41,7 +41,7 @@ export class Dashboard extends Component {
         this.tabs = TABS;
         this.state = useState({
             active: TABS[0].id,
-            health: { running: false, backend_uptime: 0, servers: {} },
+            health: { running: false, backend_uptime: 0, servers: {}, known_mcps: [], disabled_mcps: [], is_admin: false },
             activity: {
                 is_admin: false,
                 totals: { sqlite: 0, odoo: 0 },
@@ -170,9 +170,24 @@ export class Dashboard extends Component {
         try {
             this.state.health = await rpc("/erp_agent/health", {});
         } catch {
-            this.state.health = { running: false, backend_uptime: 0, servers: {} };
+            this.state.health = { running: false, backend_uptime: 0, servers: {}, known_mcps: [], disabled_mcps: [], is_admin: false };
         }
         this._syncChart();
+    }
+
+    isMcpEnabled(name) {
+        return !(this.state.health.disabled_mcps || []).includes(name);
+    }
+
+    async toggleMcp(name) {
+        if (!this.state.health.is_admin) return;
+        const enabled = !this.isMcpEnabled(name);
+        try {
+            const res = await rpc("/erp_agent/mcp_toggle", { name, enabled });
+            if (res?.ok) {
+                this.state.health = { ...this.state.health, disabled_mcps: res.disabled_mcps };
+            }
+        } catch {}
     }
 
     async _fetchActivity() {
