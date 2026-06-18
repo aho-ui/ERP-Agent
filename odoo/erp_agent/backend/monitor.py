@@ -33,6 +33,7 @@ async def run_monitor() -> None:
             states = await probe_all(agent.tools)
             if states != prev:
                 logger.info(f"[monitor] {prev} -> {states}; state changed")
+            # state 1 (alive, Odoo down) intentionally not rebuilt — next user request re-tests; rebuild can't bring downstream back
             if any(st == 0 for st in states.values()):
                 await rebuild()
                 states = await probe_all(agent.tools)
