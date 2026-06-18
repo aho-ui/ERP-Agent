@@ -225,9 +225,6 @@
                                         <div class="o_erp_agent_tools" t-esc="(ag.allowed_tools || []).length + ' tools'"/>
                                     </div>
                                     <div class="o_erp_agent_actions" t-on-click.stop="">
-                                        <span class="o_erp_agent_stat" title="Calls in last 30 days">
-                                            <t t-esc="agent30d(ag.name)"/><small>/30d</small>
-                                        </span>
                                         <label class="o_erp_agent_switch" t-att-title="ag.active ? 'Active' : 'Inactive'">
                                             <input type="checkbox"
                                                    t-att-checked="ag.active"

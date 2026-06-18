@@ -61,19 +61,6 @@ def _daily_series(Msg, cutoff, daily, days):
     return history, errors
 
 
-def _per_agent_30d(Msg):
-    cutoff = datetime.now() - timedelta(days=30)
-    msgs = Msg.search([
-        ("role", "=", "assistant"),
-        ("create_date", ">=", fields.Datetime.to_string(cutoff)),
-        ("agent_name", "!=", False),
-    ], limit=5000)
-    out = {}
-    for m in msgs:
-        out[m.agent_name] = out.get(m.agent_name, 0) + 1
-    return out
-
-
 def _build_calls(msgs, is_admin, Msg):
     calls = []
     for m in msgs[:50]:
@@ -144,5 +131,4 @@ class ActivityController(http.Controller):
             "per_agent": per_agent_list,
             "top_tools": top_tools,
             "avg_steps": avg_steps,
-            "per_agent_30d": _per_agent_30d(Msg),
         }

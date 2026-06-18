@@ -51,7 +51,6 @@ export class Dashboard extends Component {
                 per_agent: [],
                 top_tools: [],
                 avg_steps: 0,
-                per_agent_30d: {},
             },
             activityDays: 50,
             expandedCalls: {},
@@ -203,7 +202,6 @@ export class Dashboard extends Component {
                 per_agent: [],
                 top_tools: [],
                 avg_steps: 0,
-                per_agent_30d: {},
             };
         }
         this._syncActivityChart();
@@ -423,12 +421,6 @@ export class Dashboard extends Component {
         }
     }
 
-    // ---- Mock helpers used by the new widgets ----
-
-    agent30d(name) {
-        const m = this.state.activity.per_agent_30d || {};
-        return m[name] ?? 0;
-    }
 
     toggleToolExpand(name) {
         const next = { ...this.state.expandedTools };
