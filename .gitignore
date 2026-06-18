@@ -32,3 +32,5 @@ generator/artifacts/output/
 # OS
 .DS_Store
 Thumbs.db
+.context/
+.sketch/

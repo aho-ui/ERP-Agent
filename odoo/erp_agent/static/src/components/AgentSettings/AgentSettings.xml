@@ -36,9 +36,11 @@
                         <button t-on-click="toggleLogs">
                             <i class="fa fa-terminal"/> Logs
                         </button>
+                        <!-- Phase 5: Odoo Backend Credentials panel removed (MCP no longer reads creds).
                         <button t-on-click="openOdoo">
                             <i class="fa fa-database"/> Odoo
                         </button>
+                        -->
                         <button t-on-click="openCreate">
                             <i class="fa fa-plus"/> Create
                         </button>
@@ -53,6 +55,7 @@
                     </div>
                 </t>
 
+                <!-- Phase 5: Odoo Backend Credentials panel removed (MCP no longer reads creds).
                 <t t-if="state.mode === 'odoo'">
                     <div class="o_agent_settings_field">
                         <label>Odoo URL</label>
@@ -85,6 +88,7 @@
                         <button t-on-click="cancelForm">Cancel</button>
                     </div>
                 </t>
+                -->
 
                 <t t-if="state.mode === 'form'">
                     <div class="o_agent_settings_field">
