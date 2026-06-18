@@ -12,21 +12,10 @@ _Status = Literal["ok", "not_found"]
 
 class AgentRegistry:
     _cache: list[dict] | None = None
-    # _custom: list[dict] = []                  # active customs (warmed by controller)
-    # _disabled_defaults: set[str] = set()      # default agent names turned OFF globally
 
     @classmethod
     def invalidate(cls) -> None:
         cls._cache = None
-
-    # @classmethod
-    # def set_state(cls, custom: list[dict], disabled_defaults: list[str]) -> None:
-    #     cls._custom = custom or []
-    #     cls._disabled_defaults = set(disabled_defaults or [])
-
-    # @classmethod
-    # def set_custom(cls, agents: list[dict]) -> None:
-    #     cls._custom = agents or []
 
     @classmethod
     def _defaults_raw(cls) -> list[dict]:

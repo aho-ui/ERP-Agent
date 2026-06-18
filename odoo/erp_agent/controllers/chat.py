@@ -10,6 +10,7 @@ from odoo.http import request
 from ._helpers import _agent_dict, _disabled_defaults, _enabled_mcps, _ensure_path
 
 DAEMON_URL = "http://127.0.0.1:8001/chat/"
+_DAEMON_TIMEOUT = 300
 
 
 class ChatController(http.Controller):
@@ -63,7 +64,7 @@ class ChatController(http.Controller):
             headers["X-API-Key"] = api_key
 
         upstream = requests.post(DAEMON_URL, json=forwarded, headers=headers,
-                                 stream=True, timeout=300)
+                                 stream=True, timeout=_DAEMON_TIMEOUT)
 
         def relay():
             for chunk in upstream.iter_content(chunk_size=None):

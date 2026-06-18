@@ -1,7 +1,7 @@
 from odoo import http
 from odoo.http import request
 
-from ._helpers import MODEL_PRESETS, _ensure_path, _mask
+from ._helpers import MODEL_PRESETS, _ensure_path, _mask, _safe_int
 
 
 def _to_dict(rec):
@@ -28,10 +28,7 @@ class ProfilesController(http.Controller):
             }
 
         if action == "get":
-            try:
-                rec = Profile.browse(int(kw.get("id", 0))).exists()
-            except (TypeError, ValueError):
-                rec = Profile.browse()
+            rec = Profile.browse(_safe_int(kw.get("id"))).exists()
             return {"profile": _mask(_to_dict(rec)) if rec else None}
 
         if action == "create":
@@ -43,10 +40,7 @@ class ProfilesController(http.Controller):
             return {"ok": True, "profile": _mask(_to_dict(rec))}
 
         if action == "update":
-            try:
-                rec = Profile.browse(int(kw.get("id", 0))).exists()
-            except (TypeError, ValueError):
-                rec = Profile.browse()
+            rec = Profile.browse(_safe_int(kw.get("id"))).exists()
             if rec:
                 vals = {}
                 if kw.get("name") is not None:
@@ -61,10 +55,7 @@ class ProfilesController(http.Controller):
             return {"ok": bool(rec), "profile": _mask(_to_dict(rec)) if rec else None}
 
         if action == "delete":
-            try:
-                rec = Profile.browse(int(kw.get("id", 0))).exists()
-            except (TypeError, ValueError):
-                rec = Profile.browse()
+            rec = Profile.browse(_safe_int(kw.get("id"))).exists()
             if rec:
                 rec.unlink()
             return {"ok": bool(rec)}

@@ -23,10 +23,15 @@ MODEL_PRESETS = [
     "deepseek/deepseek-chat",
 ]
 
-# # _DISABLED_PARAM = "erp_agent.disabled_default_agents"  # was global; now per-user on res.users.erp_agent_disabled_defaults
-
 _KNOWN_MCPS = ["odoo", "sqlite"]
 _DISABLED_MCPS_PARAM = "erp_agent.disabled_mcps"
+
+
+def _safe_int(x, default=0):
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        return default
 
 
 def _ensure_path():
@@ -41,15 +46,6 @@ def _is_running():
             return True
     except OSError:
         return False
-
-
-# def _apply_runtime_config(profile_id):
-#     # unused: profile now travels in the chat bundle per request, no daemon side-effect needed.
-#     try:
-#         from backend.agent_loop import apply_runtime_config
-#         apply_runtime_config(profile_id)
-#     except Exception:
-#         pass
 
 
 def _mask(p):
@@ -109,26 +105,6 @@ def _save_disabled_defaults(env, names):
     env.user.sudo().write({
         "erp_agent_disabled_defaults": json.dumps(sorted(set(names))),
     })
-
-
-def _warm_agents(env):
-    # daemon no longer caches custom agents — bundle path supplies them per request
-    return env["erp_agent.agent"].browse([])
-    # from backend.agents.registry import AgentRegistry
-    # recs = env["erp_agent.agent"].search([])
-    # AgentRegistry.set_state(
-    #     custom=[
-    #         {
-    #             "name": d["name"],
-    #             "description": d["description"],
-    #             "system_prompt": d["system_prompt"],
-    #             "allowed_tools": d["allowed_tools"],
-    #         }
-    #         for d in (_agent_dict(r) for r in recs)
-    #     ],
-    #     disabled_defaults=_disabled_defaults(env),
-    # )
-    # return recs
 
 
 def _disabled_mcps(env):

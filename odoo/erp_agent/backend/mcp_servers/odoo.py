@@ -7,15 +7,6 @@ import urllib.request
 
 from mcp.server.fastmcp import FastMCP
 
-# import xmlrpc.client  # dropped — MCP no longer authenticates against Odoo XML-RPC;
-                        # all ORM calls go through Odoo's /erp_agent/internal/execute
-                        # route, which validates a daemon-signed token and switches
-                        # the env to the requesting user (record rules apply).
-
-# URL = os.environ.get("ODOO_URL", "http://localhost:8069")
-# DB = os.environ.get("ODOO_DB", "odoo_dev_18")
-# USERNAME = os.environ.get("ODOO_USER", "admin")
-# PASSWORD = os.environ.get("ODOO_PASSWORD", "admin")
 EXEC_URL = os.environ.get(
     "ERP_AGENT_EXEC_URL",
     "http://localhost:8069/erp_agent/internal/execute",
@@ -26,19 +17,6 @@ mcp = FastMCP("odoo")
 # carries the per-call daemon-signed token from `needs()` into the tool body's
 # `_exec()` calls. ContextVar isolates per asyncio task / per sync invocation.
 _token: contextvars.ContextVar[str | None] = contextvars.ContextVar("mcp_odoo_token", default=None)
-
-# legacy in-process state — replaced by _token + per-call HTTP exec
-# _uid: contextvars.ContextVar[int | None] = contextvars.ContextVar("mcp_uid", default=None)
-# _models: contextvars.ContextVar = contextvars.ContextVar("mcp_models", default=None)
-
-
-# def connect():
-#     common = xmlrpc.client.ServerProxy(f"{URL}/xmlrpc/2/common")
-#     uid = common.authenticate(DB, USERNAME, PASSWORD, {})
-#     if not uid:
-#         raise Exception("Odoo authentication failed")
-#     models = xmlrpc.client.ServerProxy(f"{URL}/xmlrpc/2/object")
-#     return uid, models
 
 
 @mcp.tool()
@@ -54,10 +32,6 @@ def health() -> str:
         return json.dumps({"status": "UP", "reason": "connected"})
     except Exception as e:
         return json.dumps({"status": "DOWN", "reason": str(e)})
-
-
-# def execute(uid, models, model, method, args, kwargs=None):
-#     return models.execute_kw(DB, uid, PASSWORD, model, method, args, kwargs or {})
 
 
 def _exec(model: str, method: str, args=None, kwargs=None):
@@ -366,28 +340,23 @@ def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -
 
 
 @mcp.tool()
+@needs(["sale.order", "res.partner", "product.product", "purchase.order", "account.move"])
 def dashboard_stats() -> str:
-    # NOTE: dashboard_stats has no @needs decorator and therefore no token; it
-    # can't authenticate against the per-user /internal/execute route. Until
-    # this tool is wired to receive a token (or removed), it returns an empty
-    # payload so it doesn't crash the UI.
-    return json.dumps({})
-    # try:
-    #     uid, models = connect()
-    #     open_sales = len(execute(uid, models, "sale.order", "search", [[["state", "in", ["draft", "sale"]]]], {"limit": 10000}))
-    #     total_customers = len(execute(uid, models, "res.partner", "search", [[["is_company", "=", True], ["customer_rank", ">", 0]]], {"limit": 10000}))
-    #     total_products = len(execute(uid, models, "product.product", "search", [[["sale_ok", "=", True]]], {"limit": 10000}))
-    #     open_purchase = len(execute(uid, models, "purchase.order", "search", [[["state", "in", ["draft", "purchase"]]]], {"limit": 10000}))
-    #     unpaid_invoices = len(execute(uid, models, "account.move", "search", [[["move_type", "=", "out_invoice"], ["payment_state", "in", ["not_paid", "partial"]]]], {"limit": 10000}))
-    #     return json.dumps({
-    #         "open_sales_orders": open_sales,
-    #         "total_customers": total_customers,
-    #         "total_products": total_products,
-    #         "open_purchase_orders": open_purchase,
-    #         "unpaid_invoices": unpaid_invoices,
-    #     })
-    # except Exception:
-    #     return json.dumps({})
+    try:
+        open_sales = len(_exec("sale.order", "search", [[["state", "in", ["draft", "sale"]]]], {"limit": 10000}))
+        total_customers = len(_exec("res.partner", "search", [[["is_company", "=", True], ["customer_rank", ">", 0]]], {"limit": 10000}))
+        total_products = len(_exec("product.product", "search", [[["sale_ok", "=", True]]], {"limit": 10000}))
+        open_purchase = len(_exec("purchase.order", "search", [[["state", "in", ["draft", "purchase"]]]], {"limit": 10000}))
+        unpaid_invoices = len(_exec("account.move", "search", [[["move_type", "=", "out_invoice"], ["payment_state", "in", ["not_paid", "partial"]]]], {"limit": 10000}))
+        return json.dumps({
+            "open_sales_orders": open_sales,
+            "total_customers": total_customers,
+            "total_products": total_products,
+            "open_purchase_orders": open_purchase,
+            "unpaid_invoices": unpaid_invoices,
+        })
+    except Exception:
+        return json.dumps({})
 
 
 if __name__ == "__main__":

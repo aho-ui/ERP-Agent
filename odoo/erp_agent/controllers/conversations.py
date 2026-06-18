@@ -3,7 +3,7 @@ import json
 from odoo import http
 from odoo.http import request
 
-from ._helpers import _parse_steps
+from ._helpers import _parse_steps, _safe_int
 
 
 class ConversationsController(http.Controller):
@@ -14,11 +14,9 @@ class ConversationsController(http.Controller):
         Msg = request.env["erp_agent.message"]
 
         def _own(cid):
-            try:
-                cid = int(cid)
-            except (TypeError, ValueError):
+            cid = _safe_int(cid)
+            if not cid:
                 return Conv.browse()
-            # search applies the per-user record rule -> empty if not owner
             return Conv.search([("id", "=", cid)], limit=1)
 
         if action == "list":

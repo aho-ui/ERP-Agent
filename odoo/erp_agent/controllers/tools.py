@@ -47,12 +47,8 @@ class ToolsController(http.Controller):
                     "params": params,
                 }
 
-        # which agents allow each tool (defaults + active customs, read directly from Odoo)
-        # _warm_agents(request.env)
-        # tool_agents: dict = {}
-        # for ag in AgentRegistry.all():
-        #     for tname in ag.get("allowed_tools") or []:
-        #         tool_agents.setdefault(tname, []).append(ag["name"])
+        # which agents allow each tool (defaults + active customs, read directly from Odoo —
+        # daemon registry was removed in Phase 1; bundle path supplies agents per chat request)
         disabled = set(_disabled_defaults(request.env))
         defaults = [a for a in AgentRegistry._defaults_raw() if a["name"] not in disabled]
         customs = [_agent_dict(r) for r in request.env["erp_agent.agent"].search([])]

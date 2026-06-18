@@ -8,8 +8,11 @@ from ._helpers import (
     _available_tool_names,
     _disabled_defaults,
     _ensure_path,
+    _safe_int,
     _save_disabled_defaults,
 )
+
+_DEFAULT_PREFIX = "default:"
 
 
 class AgentsController(http.Controller):
@@ -23,7 +26,6 @@ class AgentsController(http.Controller):
         Agent = request.env["erp_agent.agent"]
 
         if action == "list":
-            # _warm_agents(request.env)  # daemon no longer caches — bundle path
             disabled = set(_disabled_defaults(request.env))
             defaults = AgentRegistry._defaults_raw()
             default_items = [{
@@ -51,24 +53,18 @@ class AgentsController(http.Controller):
         if action == "toggle":
             target = kw.get("id")
             value = bool(kw.get("active"))
-            # default toggles use the "default:<name>" id from the list payload
-            if isinstance(target, str) and target.startswith("default:"):
-                name = target.split(":", 1)[1]
+            if isinstance(target, str) and target.startswith(_DEFAULT_PREFIX):
+                name = target[len(_DEFAULT_PREFIX):]
                 disabled = set(_disabled_defaults(request.env))
                 if value:
                     disabled.discard(name)
                 else:
                     disabled.add(name)
                 _save_disabled_defaults(request.env, list(disabled))
-                # _warm_agents(request.env)  # daemon no longer caches — bundle path
                 return {"ok": True}
-            try:
-                r = Agent.with_context(active_test=False).browse(int(target)).exists()
-            except (TypeError, ValueError):
-                r = Agent.browse()
+            r = Agent.with_context(active_test=False).browse(_safe_int(target)).exists()
             if r:
                 r.active = value
-                # _warm_agents(request.env)  # daemon no longer caches — bundle path
             return {"ok": bool(r)}
 
         if action == "create":
@@ -78,14 +74,10 @@ class AgentsController(http.Controller):
                 "system_prompt": kw.get("system_prompt") or "",
                 "allowed_tools": json.dumps(kw.get("allowed_tools") or []),
             })
-            # _warm_agents(request.env)  # daemon no longer caches — bundle path
             return {"ok": True, "agent": _agent_dict(r)}
 
         if action == "update":
-            try:
-                r = Agent.with_context(active_test=False).browse(int(kw.get("id"))).exists()
-            except (TypeError, ValueError):
-                r = Agent.browse()
+            r = Agent.with_context(active_test=False).browse(_safe_int(kw.get("id"))).exists()
             if r:
                 vals = {}
                 if kw.get("name") is not None:
@@ -97,17 +89,12 @@ class AgentsController(http.Controller):
                 if kw.get("allowed_tools") is not None:
                     vals["allowed_tools"] = json.dumps(kw.get("allowed_tools") or [])
                 r.write(vals)
-                # _warm_agents(request.env)  # daemon no longer caches — bundle path
             return {"ok": bool(r)}
 
         if action == "delete":
-            try:
-                r = Agent.with_context(active_test=False).browse(int(kw.get("id"))).exists()
-            except (TypeError, ValueError):
-                r = Agent.browse()
+            r = Agent.with_context(active_test=False).browse(_safe_int(kw.get("id"))).exists()
             if r:
                 r.unlink()
-                # _warm_agents(request.env)  # daemon no longer caches — bundle path
-            return {"ok": True}
+            return {"ok": bool(r)}
 
         return {"error": f"unknown action {action!r}"}

@@ -8,7 +8,7 @@ _task_queues: dict[int, asyncio.Queue] = {}
 @dataclass
 class AgentContext:
     user_role: str = "admin"
-    user_id: str | None = None
+    user_id: int | None = None
     run_id: str | None = None
     source: str = "odoo"
     bot_id: str | None = None

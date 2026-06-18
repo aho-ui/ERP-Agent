@@ -8,7 +8,6 @@ from nanobot.agent.tools.base import Tool
 
 from backend.parsing import parse_agent_response
 from backend.agents.registry import AgentRegistry
-# from backend import profiles as _profiles  # daemon no longer reads cache — profile lives on ctx
 
 _TOOL_TIMEOUT = 60
 
@@ -161,18 +160,6 @@ class DispatchTool(Tool):
     @property
     def name(self) -> str:
         return "dispatch"
-
-    # backup: description was cached here and rebuilt on health transitions /
-    # rebuild. Now the property below builds it live, so refresh is unused.
-    # @classmethod
-    # async def refresh(cls) -> None:
-    #     agents = await AgentRegistry.aavailable(_main().healthy_servers())
-    #     names = ", ".join(a["name"] for a in agents) or "none"
-    #     cls._description = (
-    #         "Route a task to a specialized domain agent. "
-    #         "Use this for all ERP operations instead of calling MCP tools directly. "
-    #         f"Available agents: {names}."
-    #     )
 
     @property
     def description(self) -> str:

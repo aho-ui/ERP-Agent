@@ -8,7 +8,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from loguru import logger
 
-# from backend.agent_loop import get_agent_loop, set_context, _task_queues
 from backend.agent_loop import (
     get_agent_loop, set_context, _task_queues, _accepting,
     top_level_lock, sync_provider,
@@ -47,7 +46,7 @@ async def chat(request):
     # per-conversation working memory. Persistence lives in Odoo, not here.
     session_key = body.get("session_key", "odoo:default")
     uid = body.get("uid")
-    user_id = str(uid) if uid is not None else None
+    user_id = uid if isinstance(uid, int) else None
     agents = body.get("agents")
     disabled_defaults = body.get("disabled_defaults")
     profile = body.get("profile")
