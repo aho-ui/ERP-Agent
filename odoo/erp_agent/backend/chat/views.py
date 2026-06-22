@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import secrets
 import uuid
 
 from django.http import JsonResponse, StreamingHttpResponse
@@ -15,12 +16,10 @@ from backend.agent_loop import (
 from backend.utils.streaming import stream_queue
 from backend.utils.queue import CollectingQueue
 
-API_KEY = os.environ.get("AGENT_API_KEY", "")
+API_KEY = os.environ.get("AGENT_API_KEY") or secrets.token_urlsafe(32)
 
 
 def _check_key(request):
-    if not API_KEY:
-        return None
     if request.headers.get("X-API-Key", "") != API_KEY:
         return JsonResponse({"error": "Unauthorized"}, status=401)
     return None

@@ -1,5 +1,7 @@
+import ast
 import json
 import logging
+from pathlib import Path
 
 from werkzeug.wrappers import Response
 
@@ -11,56 +13,45 @@ from ._helpers import _ensure_path
 _logger = logging.getLogger(__name__)
 
 _BASE_OPS = {("ir.model", "search")}
+_MCP_SOURCE = Path(__file__).resolve().parent.parent / "backend" / "mcp_servers" / "odoo.py"
 
-_TOOL_ALLOWED_OPS = {
-    "get_sales_orders":        _BASE_OPS | {("sale.order", "search_read")},
-    "get_customers":           _BASE_OPS | {("res.partner", "search_read")},
-    "get_vendors":             _BASE_OPS | {("res.partner", "search_read")},
-    "get_products":            _BASE_OPS | {("product.product", "search_read")},
-    "get_purchase_orders":     _BASE_OPS | {("purchase.order", "search_read")},
-    "get_invoices":            _BASE_OPS | {("account.move", "search_read")},
-    "get_vendor_bills":        _BASE_OPS | {("account.move", "search_read")},
-    "create_sales_order":      _BASE_OPS | {
-        ("product.product", "read"),
-        ("sale.order", "create"),
-        ("sale.order.line", "create"),
-    },
-    "create_purchase_order":   _BASE_OPS | {
-        ("product.product", "read"),
-        ("purchase.order", "create"),
-        ("purchase.order.line", "create"),
-        ("purchase.order", "button_confirm"),
-    },
-    "create_customer_invoice": _BASE_OPS | {
-        ("product.product", "read"),
-        ("account.move", "create"),
-        ("account.move", "action_post"),
-    },
-    "create_vendor_bill":      _BASE_OPS | {
-        ("product.product", "read"),
-        ("account.move", "create"),
-        ("account.move", "action_post"),
-    },
-    "confirm_sales_order":     _BASE_OPS | {
-        ("sale.order", "button_confirm"),
-        ("sale.order", "read"),
-    },
-    "register_payment":        _BASE_OPS | {
-        ("account.move", "read"),
-        ("account.payment", "create"),
-        ("account.payment", "action_post"),
-    },
-    "update_sales_order":      _BASE_OPS | {("sale.order", "write")},
-    "update_purchase_order":   _BASE_OPS | {("purchase.order", "write")},
-    "update_invoice":          _BASE_OPS | {("account.move", "write")},
-    "dashboard_stats":         _BASE_OPS | {
-        ("sale.order", "search"),
-        ("res.partner", "search"),
-        ("product.product", "search"),
-        ("purchase.order", "search"),
-        ("account.move", "search"),
-    },
-}
+
+def _load_allowlist() -> dict:
+    out: dict = {}
+    try:
+        tree = ast.parse(_MCP_SOURCE.read_text(encoding="utf-8"))
+    except Exception:
+        _logger.exception("[internal] failed to parse %s for allowlist", _MCP_SOURCE)
+        return out
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        is_tool = any(
+            isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr == "tool"
+            for d in node.decorator_list
+        )
+        if not is_tool:
+            continue
+        ops: set = set(_BASE_OPS)
+        declared = False
+        for d in node.decorator_list:
+            if not (isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "needs"):
+                continue
+            if not d.args or not isinstance(d.args[0], (ast.List, ast.Tuple)):
+                continue
+            for elt in d.args[0].elts:
+                if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
+                    continue
+                m, mth = elt.elts
+                if isinstance(m, ast.Constant) and isinstance(mth, ast.Constant):
+                    ops.add((m.value, mth.value))
+                    declared = True
+        if declared:
+            out[node.name] = ops
+    return out
+
+
+_TOOL_ALLOWED_OPS = _load_allowlist()
 
 
 def _err(msg, status=400):

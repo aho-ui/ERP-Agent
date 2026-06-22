@@ -98,12 +98,7 @@ def _missing(model: str) -> str:
     })
 
 
-def needs(models_needed: list[str]):
-    """Decorator: pull the daemon-signed `_auth_token` out of kwargs, install on
-    the ContextVar, then check that every required Odoo model exists for this
-    user. Returns a JSON error string if either step fails. Keeps the LLM-visible
-    tool signature clean (no `_auth_token` in the public schema)."""
-
+def needs(ops: list[tuple[str, str]]):
     def deco(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
@@ -113,7 +108,7 @@ def needs(models_needed: list[str]):
                     "error": "missing auth token (chat must be initiated through Odoo controller)"
                 })
             _token.set(token)
-            for m in models_needed:
+            for m in {m for m, _ in ops}:
                 if not _model_exists(m):
                     return _missing(m)
             return fn(*args, **kwargs)
@@ -131,7 +126,7 @@ def build_domain(base: list, search: str, field: str = "name", record_id: int = 
 
 
 @mcp.tool()
-@needs(["sale.order"])
+@needs([("sale.order", "search_read")])
 def get_sales_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
     domain = build_domain([], search, record_id=id)
     orders = _exec("sale.order", "search_read", domain, {
@@ -143,7 +138,7 @@ def get_sales_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
-@needs(["res.partner"])
+@needs([("res.partner", "search_read")])
 def get_customers(limit: int = 10, search: str = "", id: int = 0) -> str:
     domain = build_domain([["is_company", "=", True]], search, record_id=id)
     customers = _exec("res.partner", "search_read", domain, {
@@ -154,7 +149,7 @@ def get_customers(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
-@needs(["res.partner"])
+@needs([("res.partner", "search_read")])
 def get_vendors(limit: int = 10, search: str = "", id: int = 0) -> str:
     domain = build_domain([["supplier_rank", ">", 0]], search, record_id=id)
     vendors = _exec("res.partner", "search_read", domain, {
@@ -165,7 +160,7 @@ def get_vendors(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
-@needs(["product.product"])
+@needs([("product.product", "search_read")])
 def get_products(limit: int = 10, search: str = "", id: int = 0) -> str:
     domain = build_domain([["sale_ok", "=", True]], search, record_id=id)
     products = _exec("product.product", "search_read", domain, {
@@ -176,7 +171,7 @@ def get_products(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
-@needs(["purchase.order"])
+@needs([("purchase.order", "search_read")])
 def get_purchase_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
     domain = build_domain([], search, record_id=id)
     orders = _exec("purchase.order", "search_read", domain, {
@@ -188,7 +183,7 @@ def get_purchase_orders(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
-@needs(["account.move"])
+@needs([("account.move", "search_read")])
 def get_invoices(limit: int = 10, search: str = "", id: int = 0) -> str:
     domain = build_domain([["move_type", "=", "out_invoice"]], search, record_id=id)
     invoices = _exec("account.move", "search_read", domain, {
@@ -200,7 +195,7 @@ def get_invoices(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
-@needs(["account.move"])
+@needs([("account.move", "search_read")])
 def get_vendor_bills(limit: int = 10, search: str = "", id: int = 0) -> str:
     domain = build_domain([["move_type", "=", "in_invoice"]], search, record_id=id)
     bills = _exec("account.move", "search_read", domain, {
@@ -212,7 +207,7 @@ def get_vendor_bills(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
-@needs(["sale.order", "sale.order.line", "product.product"])
+@needs([("product.product", "read"), ("sale.order", "create"), ("sale.order.line", "create")])
 def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str:
     product = _exec("product.product", "read", [[product_id]], {"fields": ["list_price"]})[0]
     order_id = _exec("sale.order", "create", [{"partner_id": partner_id}])
@@ -226,7 +221,7 @@ def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str
 
 
 @mcp.tool()
-@needs(["purchase.order", "purchase.order.line", "product.product"])
+@needs([("product.product", "read"), ("purchase.order", "create"), ("purchase.order.line", "create"), ("purchase.order", "button_confirm")])
 def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> str:
     product = _exec("product.product", "read", [[product_id]], {"fields": ["standard_price"]})[0]
     order_id = _exec("purchase.order", "create", [{"partner_id": vendor_id}])
@@ -241,7 +236,7 @@ def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> s
 
 
 @mcp.tool()
-@needs(["account.move", "product.product"])
+@needs([("product.product", "read"), ("account.move", "create"), ("account.move", "action_post")])
 def create_customer_invoice(partner_id: int, product_id: int, quantity: float, price_unit: float) -> str:
     product = _exec("product.product", "read", [[product_id]], {"fields": ["name"]})[0]
     invoice_id = _exec("account.move", "create", [{
@@ -258,7 +253,7 @@ def create_customer_invoice(partner_id: int, product_id: int, quantity: float, p
 
 
 @mcp.tool()
-@needs(["account.move", "product.product"])
+@needs([("product.product", "read"), ("account.move", "create"), ("account.move", "action_post")])
 def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_unit: float) -> str:
     product = _exec("product.product", "read", [[product_id]], {"fields": ["name"]})[0]
     bill_id = _exec("account.move", "create", [{
@@ -275,7 +270,7 @@ def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_u
 
 
 @mcp.tool()
-@needs(["sale.order"])
+@needs([("sale.order", "button_confirm"), ("sale.order", "read")])
 def confirm_sales_order(order_id: int) -> str:
     _exec("sale.order", "button_confirm", [[order_id]])
     order = _exec("sale.order", "read", [[order_id]], {"fields": ["id", "name", "state"]})[0]
@@ -283,7 +278,7 @@ def confirm_sales_order(order_id: int) -> str:
 
 
 @mcp.tool()
-@needs(["account.move", "account.payment"])
+@needs([("account.move", "read"), ("account.payment", "create"), ("account.payment", "action_post")])
 def register_payment(invoice_id: int, amount: float) -> str:
     invoice = _exec("account.move", "read", [[invoice_id]], {"fields": ["id", "partner_id", "move_type"]})[0]
     is_outbound = invoice["move_type"] == "in_invoice"
@@ -298,7 +293,7 @@ def register_payment(invoice_id: int, amount: float) -> str:
 
 
 @mcp.tool()
-@needs(["sale.order"])
+@needs([("sale.order", "write")])
 def update_sales_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
     updates = {}
     if partner_id is not None:
@@ -312,7 +307,7 @@ def update_sales_order(order_id: int, partner_id: int = None, notes: str = None)
 
 
 @mcp.tool()
-@needs(["purchase.order"])
+@needs([("purchase.order", "write")])
 def update_purchase_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
     updates = {}
     if partner_id is not None:
@@ -326,7 +321,7 @@ def update_purchase_order(order_id: int, partner_id: int = None, notes: str = No
 
 
 @mcp.tool()
-@needs(["account.move"])
+@needs([("account.move", "write")])
 def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -> str:
     updates = {}
     if partner_id is not None:
@@ -340,7 +335,7 @@ def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -
 
 
 @mcp.tool()
-@needs(["sale.order", "res.partner", "product.product", "purchase.order", "account.move"])
+@needs([("sale.order", "search"), ("res.partner", "search"), ("product.product", "search"), ("purchase.order", "search"), ("account.move", "search")])
 def dashboard_stats() -> str:
     try:
         open_sales = len(_exec("sale.order", "search", [[["state", "in", ["draft", "sale"]]]], {"limit": 10000}))

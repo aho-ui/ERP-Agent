@@ -1,5 +1,4 @@
 import json
-import os
 
 import requests
 from werkzeug.wrappers import Response
@@ -18,6 +17,7 @@ class ChatController(http.Controller):
     @http.route("/erp_agent/chat", type="http", auth="user", methods=["POST"], csrf=False)
     def chat(self, **kw):
         _ensure_path()
+        from backend.chat.views import API_KEY
 
         try:
             body = json.loads(request.httprequest.get_data(as_text=True) or "{}")
@@ -58,11 +58,7 @@ class ChatController(http.Controller):
             "enabled_mcps": _enabled_mcps(request.env),
         }
 
-        headers = {"Content-Type": "application/json"}
-        api_key = os.environ.get("AGENT_API_KEY", "")
-        if api_key:
-            headers["X-API-Key"] = api_key
-
+        headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
         upstream = requests.post(DAEMON_URL, json=forwarded, headers=headers,
                                  stream=True, timeout=_DAEMON_TIMEOUT)
 
