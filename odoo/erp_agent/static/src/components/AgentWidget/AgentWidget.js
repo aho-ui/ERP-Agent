@@ -57,41 +57,11 @@ class AgentWidget extends Component {
         onMounted(() => {
             document.addEventListener("mousemove", this._onMouseMove);
             document.addEventListener("mouseup", this._onMouseUp);
-            this._warmProfileCache();
-            this._warmAgentCache();
         });
         onWillUnmount(() => {
             document.removeEventListener("mousemove", this._onMouseMove);
             document.removeEventListener("mouseup", this._onMouseUp);
         });
-    }
-
-    async _warmProfileCache() {
-        // hit the Odoo controller once so it loads profiles from the DB into
-        // the shared backend cache — the daemon chat path reads that cache.
-        try {
-            await fetch("/erp_agent/profile", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ jsonrpc: "2.0", method: "call", params: { action: "list" } }),
-            });
-        } catch (e) {
-            // best effort; Settings panel will warm it again on open
-        }
-    }
-
-    async _warmAgentCache() {
-        // load custom agents from the DB into the shared registry cache so the
-        // dispatch path can route to them.
-        try {
-            await fetch("/erp_agent/agent", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ jsonrpc: "2.0", method: "call", params: { action: "list" } }),
-            });
-        } catch (e) {
-            // best effort
-        }
     }
 
     selectProfile(id) {

@@ -1,8 +1,6 @@
 /** @odoo-module **/
 import { Component, useState, markup, onWillStart, useRef, useEffect } from "@odoo/owl";
-// import { session } from "@web/session";  // uid is now taken server-side from request.env.user
 
-// const BACKEND_URL = "http://localhost:8001/";  // chat now routes through Odoo for per-user bundle
 const CHAT_URL = "/erp_agent/chat";
 const CONV_URL = "/erp_agent/conversation";
 

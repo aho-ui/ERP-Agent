@@ -17,8 +17,8 @@ def parse_agent_response(raw: str, agent_name: str, task: str, q, fallback: str)
     try:
         parsed = json_repair.loads(text)
         if not isinstance(parsed, dict):
-            logger.warning(f"[{agent_name}] response not a dict after parse, skipping artifact")
-            return ParseResult(summary=fallback, artifacts=[])
+            logger.warning(f"[{agent_name}] response not a dict after parse, returning raw text")
+            return ParseResult(summary=text or fallback, artifacts=[])
 
         summary = parsed.get("summary", fallback)
         collected: list = []
@@ -51,4 +51,4 @@ def parse_agent_response(raw: str, agent_name: str, task: str, q, fallback: str)
         return ParseResult(summary=summary, artifacts=collected)
     except Exception as e:
         logger.warning(f"[{agent_name}] artifact parse failed: {e}")
-        return ParseResult(summary=fallback, artifacts=[])
+        return ParseResult(summary=text or fallback, artifacts=[])

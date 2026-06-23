@@ -3,13 +3,14 @@ import json
 from odoo import http
 from odoo.http import request
 
-from ._helpers import _parse_steps, _safe_int
+from ._helpers import _ensure_path, _parse_steps, _safe_int
 
 
 class ConversationsController(http.Controller):
 
     @http.route("/erp_agent/conversation", type="json", auth="user", methods=["POST"], csrf=False)
     def conversation(self, action="list", **kw):
+        _ensure_path()
         Conv = request.env["erp_agent.conversation"]
         Msg = request.env["erp_agent.message"]
 

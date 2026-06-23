@@ -281,6 +281,8 @@ def confirm_sales_order(order_id: int) -> str:
 @needs([("account.move", "read"), ("account.payment", "create"), ("account.payment", "action_post")])
 def register_payment(invoice_id: int, amount: float) -> str:
     invoice = _exec("account.move", "read", [[invoice_id]], {"fields": ["id", "partner_id", "move_type"]})[0]
+    if invoice["move_type"] not in ("in_invoice", "out_invoice"):
+        return json.dumps({"error": f"register_payment only supports invoices and bills, got move_type={invoice['move_type']!r}"})
     is_outbound = invoice["move_type"] == "in_invoice"
     payment_id = _exec("account.payment", "create", [{
         "amount": amount,
