@@ -17,6 +17,7 @@ class ErpAgentConversation(models.Model):
     message_ids = fields.One2many(
         "erp_agent.message", "conversation_id", string="Messages"
     )
+    system_prompt_override = fields.Text()
 
 
 class ErpAgentMessage(models.Model):
@@ -35,7 +36,11 @@ class ErpAgentMessage(models.Model):
         required=True,
     )
     content = fields.Text()
-    artifacts = fields.Text()  # JSON string (table artifacts)
-    steps = fields.Text()  # JSON array of progress/thinking lines
-    tools_used = fields.Text()  # JSON list of mcp_<server>_<tool>
-    agent_name = fields.Char()  # dispatched sub-agent
+    artifacts = fields.Text()
+    steps = fields.Text()
+    tools_used = fields.Text()
+    agent_name = fields.Char()
+    prompt_tokens = fields.Integer(default=0)
+    completion_tokens = fields.Integer(default=0)
+    model = fields.Char()
+    cost_usd = fields.Float(digits=(10, 6), default=0.0)

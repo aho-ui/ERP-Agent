@@ -14,27 +14,86 @@
                     <i class="fa fa-cog"/>
                 </button>
                 <div t-if="state.showDropdown" class="o_erp_chat_dropdown">
-                    <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
-                        <div class="o_erp_chat_dropdown_item"
-                             t-att-class="{'is-active': conv.id === state.activeId}"
-                             t-on-click="() => this.switchConv(conv.id)">
-                            <span t-esc="conv.name"/>
-                            <button class="o_erp_chat_delete_btn"
-                                    t-on-click.stop="() => this.renameConv(conv.id)">
-                                <i class="fa fa-pencil"/>
-                            </button>
-                            <button class="o_erp_chat_delete_btn"
-                                    t-on-click.stop="() => this.deleteConv(conv.id)">
-                                <i class="fa fa-trash"/>
-                            </button>
-                        </div>
+                    <div class="o_erp_chat_search">
+                        <input type="text"
+                               class="o_erp_chat_search_input"
+                               placeholder="Search conversations..."
+                               t-att-value="state.searchQuery"
+                               t-on-input="onSearchInput"/>
+                    </div>
+                    <t t-if="state.searchQuery and state.searchQuery.length >= 2">
+                        <t t-if="state.searchResults.length">
+                            <t t-foreach="state.searchResults" t-as="r" t-key="r.message_id">
+                                <div class="o_erp_chat_dropdown_item is-search"
+                                     t-on-click="() => this.openSearchResult(r.conv_id)">
+                                    <div class="o_erp_chat_search_result">
+                                        <span class="o_erp_chat_search_name" t-esc="r.conv_name"/>
+                                        <div class="o_erp_chat_search_snippet" t-esc="r.snippet"/>
+                                    </div>
+                                </div>
+                            </t>
+                        </t>
+                        <div t-else="" class="o_erp_chat_search_empty">No matches</div>
+                    </t>
+                    <t t-else="">
+                        <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
+                            <div class="o_erp_chat_dropdown_item"
+                                 t-att-class="{'is-active': conv.id === state.activeId}"
+                                 t-on-click="() => this.switchConv(conv.id)">
+                                <span t-esc="conv.name"/>
+                                <button class="o_erp_chat_delete_btn"
+                                        t-on-click.stop="() => this.exportConv(conv.id)"
+                                        title="Export as markdown">
+                                    <i class="fa fa-download"/>
+                                </button>
+                                <button class="o_erp_chat_delete_btn"
+                                        t-on-click.stop="() => this.editSystemPrompt(conv.id)"
+                                        title="Edit system prompt">
+                                    <i class="fa fa-terminal"/>
+                                </button>
+                                <button class="o_erp_chat_delete_btn"
+                                        t-on-click.stop="() => this.renameConv(conv.id)">
+                                    <i class="fa fa-pencil"/>
+                                </button>
+                                <button class="o_erp_chat_delete_btn"
+                                        t-on-click.stop="() => this.deleteConv(conv.id)">
+                                    <i class="fa fa-trash"/>
+                                </button>
+                            </div>
+                        </t>
                     </t>
                 </div>
             </div>
             <div class="o_erp_chat_messages" t-ref="messages">
                 <t t-foreach="messages" t-as="msg" t-key="msg_index">
-                    <div class="o_erp_chat_message" t-att-class="'is-' + msg.role + (msg.type === 'table' ? ' is-table' : '')">
-                        <t t-if="msg.type === 'table'">
+                    <div class="o_erp_chat_message" t-att-class="'is-' + msg.role + (msg.type === 'table' ? ' is-table' : '') + (msg.type === 'pending' ? ' is-pending' : '')">
+                        <t t-if="msg.type === 'pending'">
+                            <div class="o_erp_chat_pending">
+                                <div class="o_erp_chat_pending_head">
+                                    <i class="fa fa-hand-paper-o"/>
+                                    <span class="o_erp_chat_pending_title">
+                                        Approval required: <t t-esc="msg.toolName"/>
+                                    </span>
+                                    <span class="o_erp_chat_pending_status" t-att-class="'is-' + msg.status">
+                                        <t t-esc="msg.status"/>
+                                    </span>
+                                </div>
+                                <pre class="o_erp_chat_pending_payload" t-esc="msg.payloadText"/>
+                                <div t-if="msg.status === 'pending'" class="o_erp_chat_pending_wait">
+                                    <i class="fa fa-clock-o"/> Waiting for admin approval…
+                                </div>
+                                <div t-elif="msg.status === 'executed'" class="o_erp_chat_pending_result">
+                                    <i class="fa fa-check"/> <t t-esc="msg.result"/>
+                                </div>
+                                <div t-elif="msg.status === 'failed'" class="o_erp_chat_pending_result is-error">
+                                    <i class="fa fa-times"/> <t t-esc="msg.error"/>
+                                </div>
+                                <div t-elif="msg.status === 'rejected'" class="o_erp_chat_pending_result">
+                                    <i class="fa fa-ban"/> Rejected by admin
+                                </div>
+                            </div>
+                        </t>
+                        <t t-elif="msg.type === 'table'">
                             <div class="o_erp_chat_table_header">
                                 <span t-esc="msg.title"/>
                                 <button class="o_erp_chat_table_download" t-on-click="() => this.downloadTable(msg)" title="Download CSV">
@@ -70,9 +129,11 @@
                                         · used <t t-esc="msg.tools.length"/> tool<t t-if="msg.tools.length > 1">s</t> from <t t-esc="serversFromTools(msg.tools).join(', ')"/>
                                     </t>
                                 </summary>
-                                <t t-foreach="msg.steps" t-as="step" t-key="step_index">
-                                    <div class="o_erp_chat_step" t-esc="step"/>
-                                </t>
+                                <div class="o_erp_chat_steps_body">
+                                    <t t-foreach="msg.steps" t-as="step" t-key="step_index">
+                                        <div class="o_erp_chat_step" t-esc="step"/>
+                                    </t>
+                                </div>
                             </details>
                             <span t-out="formatText(msg.text)"/>
                         </t>

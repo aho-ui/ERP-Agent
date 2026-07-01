@@ -671,6 +671,90 @@
     padding: 12px 14px;
 }
 
+.o_erp_usage {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.o_erp_usage_controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+
+    input {
+        width: 80px;
+        margin-left: 6px;
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+}
+
+.o_erp_usage_totals {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.o_erp_usage_kpi {
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+
+.o_erp_usage_kpi_label {
+    font-size: 11px;
+    color: #777;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.o_erp_usage_kpi_value {
+    font-size: 22px;
+    font-weight: 600;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+.o_erp_usage_chart {
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 12px;
+    height: 240px;
+}
+
+.o_erp_usage_tables {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+
+    @media (max-width: 900px) {
+        grid-template-columns: 1fr;
+    }
+}
+
+.o_erp_usage_table {
+    background: white;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 12px 14px;
+
+    h4 {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0 0 8px 0;
+    }
+
+    .text-end {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+}
+
 .o_erp_tools_leaderboard_head {
     font-size: 13px;
     font-weight: 600;
@@ -905,6 +989,85 @@
 .o_erp_tools_param_name {
     font-family: monospace;
     color: #333;
+}
+
+.o_erp_pending {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.o_erp_pending_head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.o_erp_pending_title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.o_erp_pending_count {
+    font-size: 12px;
+    color: #777;
+}
+
+.o_erp_pending_table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: white;
+    border: 1px solid #ececec;
+    border-radius: 6px;
+
+    th, td {
+        padding: 8px 10px;
+        text-align: left;
+        font-size: 12px;
+        border-bottom: 1px solid #f3f3f3;
+        vertical-align: top;
+    }
+
+    th {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #888;
+        font-weight: 600;
+        background: #fafafa;
+    }
+
+    .is-actions {
+        text-align: right;
+        white-space: nowrap;
+
+        .btn + .btn {
+            margin-left: 4px;
+        }
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+}
+
+.o_erp_pending_tool {
+    font-family: monospace;
+    color: #714B67;
+}
+
+.o_erp_pending_payload {
+    font-family: monospace;
+    font-size: 11px;
+    color: #444;
+    background: #fafafa;
+    border: 1px solid #ececec;
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin: 0;
+    max-height: 160px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .o_erp_tools_param_type {

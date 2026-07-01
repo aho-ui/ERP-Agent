@@ -27,6 +27,8 @@ class StatusController(http.Controller):
 
     @http.route("/erp_agent/rebuild", type="json", auth="user", methods=["POST"], csrf=False)
     def rebuild(self):
+        if not _is_admin():
+            return {"ok": False, "error": "admin only"}
         _ensure_path()
         from backend import agent_loop as AL
         return {"ok": AL.trigger_rebuild_from_thread()}

@@ -11,6 +11,21 @@ _TOOL_RE = re.compile(r"-> (mcp_\w+)\(")
 _AGENT_RE = re.compile(r"^dispatch\(['\"]([^'\"]+)['\"]\)$")
 _CALL_LINE_RE = re.compile(r"^\[([^\]]+)\] -> (mcp_\w+)\((.*)\)\s*$")
 _RESULT_LINE_RE = re.compile(r"^\[([^\]]+)\] <- (mcp_\w+):\s*(.*)$")
+_TOKENS_RE = re.compile(
+    r"^Tokens: (\d+) prompt / (\d+) completion / \d+ total(?: \| model: (\S+))?\s*$"
+)
+
+_MODEL_PRICING = {
+    # (input $/Mtok, output $/Mtok) — public list prices as of 2026-06
+    "openai/gpt-4o-mini": (0.15, 0.60),
+    "openai/gpt-4o": (2.50, 10.00),
+    "openai/gpt-4-turbo": (10.00, 30.00),
+    "anthropic/claude-3-5-sonnet-20241022": (3.00, 15.00),
+    "anthropic/claude-3-haiku-20240307": (0.25, 1.25),
+    "groq/llama-3.1-70b-versatile": (0.59, 0.79),
+    "groq/qwen/qwen3-32b": (0.29, 0.39),
+    "deepseek/deepseek-chat": (0.27, 1.10),
+}
 
 MODEL_PRESETS = [
     "openai/gpt-4o-mini",
@@ -57,6 +72,31 @@ def _mask(p):
         "model": p["model"],
         "api_key_set": bool(p.get("api_key")),
     }
+
+
+def _compute_cost(prompt, completion, model):
+    rates = _MODEL_PRICING.get(model)
+    if not rates:
+        return 0.0
+    in_rate, out_rate = rates
+    return round((prompt * in_rate + completion * out_rate) / 1_000_000, 6)
+
+
+def _parse_tokens_from_steps(steps_raw):
+    try:
+        steps = json.loads(steps_raw or "[]")
+    except Exception:
+        return 0, 0, "", 0.0
+    for s in steps:
+        if not isinstance(s, str):
+            continue
+        m = _TOKENS_RE.match(s.strip())
+        if m:
+            prompt = int(m.group(1))
+            completion = int(m.group(2))
+            model = m.group(3) or ""
+            return prompt, completion, model, _compute_cost(prompt, completion, model)
+    return 0, 0, "", 0.0
 
 
 def _parse_steps(steps_raw):

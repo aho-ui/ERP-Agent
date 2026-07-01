@@ -27,4 +27,18 @@
         <field name="domain_force">[('user_id', '=', user.id)]</field>
         <field name="groups" eval="[(4, ref('base.group_user'))]"/>
     </record>
+
+    <record id="rule_erp_agent_pending_action_own" model="ir.rule">
+        <field name="name">erp_agent.pending_action: own records only</field>
+        <field name="model_id" ref="model_erp_agent_pending_action"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <record id="rule_erp_agent_pending_action_admin" model="ir.rule">
+        <field name="name">erp_agent.pending_action: admin sees all</field>
+        <field name="model_id" ref="model_erp_agent_pending_action"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+    </record>
 </odoo>

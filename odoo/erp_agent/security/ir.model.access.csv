@@ -3,3 +3,4 @@ access_erp_agent_conversation,erp_agent.conversation,model_erp_agent_conversatio
 access_erp_agent_message,erp_agent.message,model_erp_agent_message,base.group_user,1,1,1,1
 access_erp_agent_agent,erp_agent.agent,model_erp_agent_agent,base.group_user,1,1,1,1
 access_erp_agent_profile,erp_agent.profile,model_erp_agent_profile,base.group_user,1,1,1,1
+access_erp_agent_pending_action,erp_agent.pending_action,model_erp_agent_pending_action,base.group_user,1,1,1,1

@@ -14,7 +14,7 @@
             <div class="o_erp_dashboard_content">
                 <t t-if="state.active === 'health'">
                     <div class="o_erp_health">
-                        <div class="o_erp_health_actions">
+                        <div t-if="state.health.is_admin" class="o_erp_health_actions">
                             <button class="o_erp_health_rebuild"
                                     t-on-click="manualRebuild"
                                     t-att-disabled="state.rebuilding">
@@ -374,6 +374,153 @@
                                 </table>
                             </div>
                         </t>
+                    </div>
+                </t>
+
+                <t t-elif="state.active === 'usage'">
+                    <div class="o_erp_usage">
+                        <div class="o_erp_usage_controls">
+                            <label>
+                                Window (days):
+                                <input type="number" min="1" max="365"
+                                       t-att-value="state.usageDays"
+                                       t-on-change="(ev) => this.onUsageDaysChange(ev.target.value)"/>
+                            </label>
+                        </div>
+
+                        <div class="o_erp_usage_totals">
+                            <div class="o_erp_usage_kpi">
+                                <div class="o_erp_usage_kpi_label">Total cost</div>
+                                <div class="o_erp_usage_kpi_value" t-esc="formatCost(state.usage.totals.cost_usd)"/>
+                            </div>
+                            <div class="o_erp_usage_kpi">
+                                <div class="o_erp_usage_kpi_label">Prompt tokens</div>
+                                <div class="o_erp_usage_kpi_value" t-esc="state.usage.totals.prompt_tokens.toLocaleString()"/>
+                            </div>
+                            <div class="o_erp_usage_kpi">
+                                <div class="o_erp_usage_kpi_label">Completion tokens</div>
+                                <div class="o_erp_usage_kpi_value" t-esc="state.usage.totals.completion_tokens.toLocaleString()"/>
+                            </div>
+                            <div class="o_erp_usage_kpi">
+                                <div class="o_erp_usage_kpi_label">Messages</div>
+                                <div class="o_erp_usage_kpi_value" t-esc="state.usage.totals.messages.toLocaleString()"/>
+                            </div>
+                        </div>
+
+                        <div class="o_erp_usage_chart">
+                            <canvas t-ref="usageChart"/>
+                        </div>
+
+                        <div class="o_erp_usage_tables">
+                            <div class="o_erp_usage_table">
+                                <h4>Per user</h4>
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>User</th>
+                                            <th class="text-end">Msgs</th>
+                                            <th class="text-end">Prompt</th>
+                                            <th class="text-end">Completion</th>
+                                            <th class="text-end">Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.usage.per_user" t-as="u" t-key="u.name">
+                                            <tr>
+                                                <td t-esc="u.name"/>
+                                                <td class="text-end" t-esc="u.msgs"/>
+                                                <td class="text-end" t-esc="u.prompt.toLocaleString()"/>
+                                                <td class="text-end" t-esc="u.completion.toLocaleString()"/>
+                                                <td class="text-end" t-esc="formatCost(u.cost)"/>
+                                            </tr>
+                                        </t>
+                                        <tr t-if="!state.usage.per_user.length">
+                                            <td colspan="5" class="text-center text-muted">No usage in this window.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="o_erp_usage_table">
+                                <h4>Per model</h4>
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Model</th>
+                                            <th class="text-end">Msgs</th>
+                                            <th class="text-end">Prompt</th>
+                                            <th class="text-end">Completion</th>
+                                            <th class="text-end">Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="state.usage.per_model" t-as="m" t-key="m.name">
+                                            <tr>
+                                                <td t-esc="m.name"/>
+                                                <td class="text-end" t-esc="m.msgs"/>
+                                                <td class="text-end" t-esc="m.prompt.toLocaleString()"/>
+                                                <td class="text-end" t-esc="m.completion.toLocaleString()"/>
+                                                <td class="text-end" t-esc="formatCost(m.cost)"/>
+                                            </tr>
+                                        </t>
+                                        <tr t-if="!state.usage.per_model.length">
+                                            <td colspan="5" class="text-center text-muted">No usage in this window.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <t t-elif="state.active === 'pending'">
+                    <div class="o_erp_pending">
+                        <div class="o_erp_pending_head">
+                            <span class="o_erp_pending_title">Pending write actions</span>
+                            <span class="o_erp_pending_count">
+                                <t t-esc="state.pending.actions.length"/> pending
+                            </span>
+                        </div>
+                        <table class="o_erp_pending_table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Conversation</th>
+                                    <th>Tool</th>
+                                    <th>Payload</th>
+                                    <th>Created</th>
+                                    <th class="is-actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="state.pending.actions" t-as="row" t-key="row.id">
+                                    <tr class="o_erp_pending_row">
+                                        <td t-esc="row.user_name"/>
+                                        <td t-esc="row.conversation_name"/>
+                                        <td class="o_erp_pending_tool" t-esc="row.tool_name"/>
+                                        <td>
+                                            <pre class="o_erp_pending_payload" t-esc="prettyPayload(row.payload)"/>
+                                        </td>
+                                        <td t-esc="formatTs(row.created_at)"/>
+                                        <td class="is-actions">
+                                            <button class="btn btn-sm btn-success"
+                                                    t-on-click="() => this.approvePendingRow(row.id)"
+                                                    t-att-disabled="state.pendingBusy[row.id]">
+                                                Approve
+                                            </button>
+                                            <button class="btn btn-sm btn-secondary"
+                                                    t-on-click="() => this.rejectPendingRow(row.id)"
+                                                    t-att-disabled="state.pendingBusy[row.id]">
+                                                Reject
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <tr t-if="!state.pending.actions.length">
+                                    <td colspan="6" class="text-center text-muted">No pending actions.</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </t>
             </div>

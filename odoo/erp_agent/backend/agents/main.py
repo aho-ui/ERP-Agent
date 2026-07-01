@@ -17,6 +17,8 @@ class AgentContext:
     disabled_defaults: list[str] | None = None
     profile: dict | None = None
     enabled_mcps: list[str] | None = None
+    system_prompt_override: str | None = None
+    is_admin: bool = False
 
 
 _ctx: ContextVar[AgentContext] = ContextVar("agent_ctx", default=AgentContext())

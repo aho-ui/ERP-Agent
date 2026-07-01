@@ -9,6 +9,8 @@ const TABS = [
     { id: "health", label: "Health" },
     { id: "agents", label: "Agents" },
     { id: "tools", label: "Tools" },
+    { id: "usage", label: "Usage", adminOnly: true },
+    { id: "pending", label: "Pending", adminOnly: true },
 ];
 
 
@@ -38,7 +40,6 @@ export class Dashboard extends Component {
     static props = ["*"];
 
     setup() {
-        this.tabs = TABS;
         this.state = useState({
             active: TABS[0].id,
             health: { running: false, backend_uptime: 0, servers: {}, known_mcps: [], disabled_mcps: [], is_admin: false },
@@ -62,13 +63,19 @@ export class Dashboard extends Component {
             expandedTools: {},    // tool name -> true (Tools tab)
             toolsGroups: {},      // server -> [tool, ...] (from /erp_agent/tools)
             rebuilding: false,
+            usage: { days: 30, totals: { prompt_tokens: 0, completion_tokens: 0, cost_usd: 0, messages: 0 }, per_user: [], per_model: [], history: [] },
+            usageDays: 30,
+            pending: { actions: [] },
+            pendingBusy: {},
         });
         this.canvasRef = useRef("uptimeChart");
         this.activityCanvasRef = useRef("activityChart");
         this.perAgentCanvasRef = useRef("perAgentChart");
+        this.usageCanvasRef = useRef("usageChart");
         this.chart = null;
         this.activityChart = null;
         this.perAgentChart = null;
+        this.usageChart = null;
 
         onWillStart(async () => {
             await loadJS(CHART_JS);
@@ -76,6 +83,8 @@ export class Dashboard extends Component {
             await this._fetchActivity();
             await this._fetchAgents();
             await this._fetchTools();
+            await this._fetchUsage();
+            await this._fetchPending();
         });
 
         useEffect(
@@ -108,17 +117,36 @@ export class Dashboard extends Component {
             () => [this.state.active]
         );
 
+        useEffect(
+            () => {
+                if (this.state.active === "usage" && this.usageCanvasRef.el && window.Chart) {
+                    this._buildUsageChart();
+                    return () => this._destroyUsageChart();
+                }
+            },
+            () => [this.state.active]
+        );
+
         this._poll = setInterval(() => {
             this._fetchHealth();
             this._fetchActivity();
             this._fetchTools();
+            if (this.state.health.is_admin) {
+                this._fetchUsage();
+                this._fetchPending();
+            }
         }, POLL_MS);
         onWillUnmount(() => {
             clearInterval(this._poll);
             this._destroyChart();
             this._destroyActivityChart();
             this._destroyPerAgentChart();
+            this._destroyUsageChart();
         });
+    }
+
+    get tabs() {
+        return TABS.filter(t => !t.adminOnly || this.state.health.is_admin);
     }
 
     switchTab(id) {
@@ -215,6 +243,122 @@ export class Dashboard extends Component {
         } catch {
             this.state.toolsGroups = {};
         }
+    }
+
+    async _fetchUsage() {
+        try {
+            const res = await rpc("/erp_agent/usage", { days: this.state.usageDays });
+            if (res && !res.error) this.state.usage = res;
+        } catch {
+            // admin-only endpoint; ignore for non-admins
+        }
+        this._syncUsageChart();
+    }
+
+    onUsageDaysChange(value) {
+        let v = parseInt(value, 10);
+        if (isNaN(v)) return;
+        v = Math.max(1, Math.min(365, v));
+        if (v === this.state.usageDays) return;
+        this.state.usageDays = v;
+        this._fetchUsage();
+    }
+
+    _usageChartData() {
+        const hist = this.state.usage.history || [];
+        const labels = hist.map(h => (h.day ? h.day.slice(5) : ""));
+        return {
+            labels,
+            datasets: [{
+                label: "Cost (USD)",
+                data: hist.map(h => h.cost),
+                borderColor: "#28a745",
+                backgroundColor: "rgba(40,167,69,0.12)",
+                tension: 0.25,
+                pointRadius: 2,
+                borderWidth: 2,
+                fill: true,
+            }],
+        };
+    }
+
+    _buildUsageChart() {
+        const Chart = window.Chart;
+        if (!Chart || !this.usageCanvasRef.el) return;
+        this.usageChart = new Chart(this.usageCanvasRef.el, {
+            type: "line",
+            data: this._usageChartData(),
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    y: { beginAtZero: true, ticks: { callback: v => "$" + v.toFixed(2) } },
+                    x: { ticks: { maxTicksLimit: 10 } },
+                },
+                plugins: { legend: { position: "bottom" } },
+            },
+        });
+    }
+
+    _syncUsageChart() {
+        if (!this.usageChart) return;
+        this.usageChart.data = this._usageChartData();
+        this.usageChart.update();
+    }
+
+    _destroyUsageChart() {
+        if (this.usageChart) {
+            this.usageChart.destroy();
+            this.usageChart = null;
+        }
+    }
+
+    async _fetchPending() {
+        try {
+            const res = await rpc("/erp_agent/pending_actions", { action: "list", status: "pending" });
+            this.state.pending = { actions: res?.actions || [] };
+        } catch {
+            this.state.pending = { actions: [] };
+        }
+    }
+
+    async approvePendingRow(id) {
+        if (this.state.pendingBusy[id]) return;
+        this.state.pendingBusy = { ...this.state.pendingBusy, [id]: true };
+        try {
+            await rpc("/erp_agent/pending_actions", { action: "approve", id });
+        } catch {}
+        const next = { ...this.state.pendingBusy };
+        delete next[id];
+        this.state.pendingBusy = next;
+        await this._fetchPending();
+    }
+
+    async rejectPendingRow(id) {
+        if (this.state.pendingBusy[id]) return;
+        this.state.pendingBusy = { ...this.state.pendingBusy, [id]: true };
+        try {
+            await rpc("/erp_agent/pending_actions", { action: "reject", id });
+        } catch {}
+        const next = { ...this.state.pendingBusy };
+        delete next[id];
+        this.state.pendingBusy = next;
+        await this._fetchPending();
+    }
+
+    prettyPayload(raw) {
+        if (!raw) return "";
+        try {
+            return JSON.stringify(JSON.parse(raw), null, 2);
+        } catch {
+            return raw;
+        }
+    }
+
+    formatCost(c) {
+        if (!c) return "$0.00";
+        return "$" + Number(c).toFixed(c < 1 ? 4 : 2);
     }
 
     async _fetchAgents() {

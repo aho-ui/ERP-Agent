@@ -50,6 +50,8 @@ async def chat(request):
     disabled_defaults = body.get("disabled_defaults")
     profile = body.get("profile")
     enabled_mcps = body.get("enabled_mcps")
+    system_prompt_override = body.get("system_prompt_override") or None
+    is_admin = bool(body.get("is_admin"))
     set_context(
         user_role="admin",
         user_id=user_id,
@@ -60,6 +62,8 @@ async def chat(request):
         disabled_defaults=disabled_defaults,
         profile=profile,
         enabled_mcps=enabled_mcps,
+        system_prompt_override=system_prompt_override,
+        is_admin=is_admin,
     )
 
     queue = CollectingQueue()

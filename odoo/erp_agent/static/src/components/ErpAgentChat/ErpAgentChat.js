@@ -1,8 +1,10 @@
 /** @odoo-module **/
-import { Component, useState, markup, onWillStart, useRef, useEffect } from "@odoo/owl";
+import { Component, useState, markup, onWillStart, onWillUnmount, useRef, useEffect } from "@odoo/owl";
+import { chatService } from "./chatService";
 
-const CHAT_URL = "/erp_agent/chat";
 const CONV_URL = "/erp_agent/conversation";
+const PENDING_URL = "/erp_agent/pending_actions";
+const PENDING_POLL_MS = 5000;
 
 const TOOL_RE = /-> (mcp_\w+)\(/;
 function _toolsFromSteps(steps) {
@@ -20,14 +22,18 @@ export class ErpAgentChat extends Component {
 
     setup() {
         this.state = useState({
-            conversations: [],   // [{id, name, messages: [], loaded: bool}]
+            conversations: [],
             activeId: null,
             showDropdown: false,
             input: "",
             loading: false,
-            liveSteps: [],       // progress lines for the in-flight turn
+            liveSteps: [],
+            searchQuery: "",
+            searchResults: [],
         });
-        this._abortCtrl = null;  // AbortController for the in-flight chat fetch
+        this._searchTimer = null;
+        this._serviceUnsub = null;
+        this._handledStatus = new Map();
         this.messagesRef = useRef("messages");
 
         // auto-scroll to bottom whenever the active conversation's message
@@ -48,11 +54,30 @@ export class ErpAgentChat extends Component {
                 await this.switchConv(this.state.conversations[0].id);
             }
         });
+
+        this._pendingPoll = setInterval(() => this._refreshPendingStatuses(), PENDING_POLL_MS);
+        onWillUnmount(() => {
+            clearInterval(this._pendingPoll);
+            if (this._serviceUnsub) {
+                this._serviceUnsub();
+                this._serviceUnsub = null;
+            }
+        });
     }
 
     // --- Odoo controller RPC (same origin, trusted user) ---
     async _rpc(action, params = {}) {
         const r = await fetch(CONV_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", method: "call", params: { action, ...params } }),
+        });
+        const data = await r.json();
+        return data.result;
+    }
+
+    async _pendingRpc(action, params = {}) {
+        const r = await fetch(PENDING_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ jsonrpc: "2.0", method: "call", params: { action, ...params } }),
@@ -69,7 +94,6 @@ export class ErpAgentChat extends Component {
         return this.activeConv ? this.activeConv.messages : [];
     }
 
-    // stored message rows -> UI bubbles (mirror of live SSE handling)
     _rowsToUI(rows) {
         const out = [];
         for (const m of rows) {
@@ -112,6 +136,73 @@ export class ErpAgentChat extends Component {
             conv.messages = this._rowsToUI(res?.messages || []);
             conv.loaded = true;
         }
+        this._subscribeToActive();
+    }
+
+    _subscribeToActive() {
+        if (this._serviceUnsub) {
+            this._serviceUnsub();
+            this._serviceUnsub = null;
+        }
+        const convId = this.state.activeId;
+        if (!convId) return;
+        this._serviceUnsub = chatService.subscribe(convId, (s) => this._onServiceUpdate(convId, s));
+        const snap = chatService.getState(convId);
+        this._onServiceUpdate(convId, snap);
+    }
+
+    _onServiceUpdate(convId, s) {
+        if (convId !== this.state.activeId) return;
+        if (!s) {
+            this.state.loading = false;
+            this.state.liveSteps = [];
+            return;
+        }
+        this.state.loading = s.status === "loading";
+        this.state.liveSteps = [...s.liveSteps];
+
+        // mirror in-flight pending bubbles into conv.messages so they render
+        const conv = this.activeConv;
+        if (conv) {
+            const seen = new Set(conv.messages.filter(m => m.type === "pending").map(m => m.actionId));
+            for (const pa of s.pendingActions) {
+                if (!seen.has(pa.actionId)) {
+                    conv.messages.push({
+                        role: "assistant", type: "pending",
+                        actionId: pa.actionId,
+                        toolName: pa.toolName,
+                        payload: pa.payload,
+                        payloadText: JSON.stringify(pa.payload, null, 2),
+                        status: "pending",
+                        result: "",
+                        error: "",
+                    });
+                }
+            }
+        }
+
+        const finished = s.status === "done" || s.status === "error" || s.status === "aborted";
+        if (finished && this._handledStatus.get(convId) !== s.status) {
+            this._handledStatus.set(convId, s.status);
+            this._refreshAfterFinish(convId);
+        } else if (s.status === "loading") {
+            this._handledStatus.set(convId, "loading");
+        }
+    }
+
+    async _refreshAfterFinish(convId) {
+        const conv = this.state.conversations.find(c => c.id === convId);
+        if (!conv) return;
+        try {
+            const res = await this._rpc("messages", { id: convId });
+            const pendingBubbles = conv.messages.filter(m => m.type === "pending");
+            conv.messages = this._rowsToUI(res?.messages || []).concat(pendingBubbles);
+            conv.loaded = true;
+        } catch (e) {
+            // best effort
+        }
+        this.state.loading = false;
+        this.state.liveSteps = [];
     }
 
     async newConv() {
@@ -120,6 +211,7 @@ export class ErpAgentChat extends Component {
             const c = { id: res.conversation.id, name: res.conversation.name, messages: [], loaded: true };
             this.state.conversations.unshift(c);
             this.state.activeId = c.id;
+            this._subscribeToActive();
         }
         this.state.showDropdown = false;
     }
@@ -143,107 +235,102 @@ export class ErpAgentChat extends Component {
         if (res?.ok) conv.name = name.trim();
     }
 
+    async editSystemPrompt(id) {
+        const cur = await this._rpc("get_system_prompt", { id });
+        const next = window.prompt(
+            "System prompt override for this conversation (leave blank to use the agent's default):",
+            cur?.prompt || ""
+        );
+        if (next === null) return;
+        await this._rpc("set_system_prompt", { id, prompt: next });
+    }
+
     toggleDropdown() {
         this.state.showDropdown = !this.state.showDropdown;
     }
 
-    async _persist(role, content, artifacts, steps) {
+    onSearchInput(ev) {
+        this.state.searchQuery = ev.target.value;
+        if (this._searchTimer) clearTimeout(this._searchTimer);
+        this._searchTimer = setTimeout(() => this._runSearch(this.state.searchQuery), 250);
+    }
+
+    async _runSearch(q) {
+        if (!q || q.length < 2) {
+            this.state.searchResults = [];
+            return;
+        }
         try {
-            await this._rpc("append", {
-                id: this.state.activeId,
-                role,
-                content: content || "",
-                artifacts: artifacts || "",
-                steps: steps || "",
-            });
+            const res = await this._rpc("search", { query: q });
+            this.state.searchResults = res?.results || [];
         } catch (e) {
-            // non-fatal: message still shows in UI this session
+            this.state.searchResults = [];
         }
     }
 
-    async onSend() {
-        if (!this.state.input.trim() || this.state.loading || !this.activeConv) return;
-        const text = this.state.input.trim();
-        const conv = this.activeConv;
-        conv.messages.push({ text, role: "user" });
-        this.state.input = "";
-        this.state.loading = true;
-        this.state.liveSteps = [];
-        this._abortCtrl = new AbortController();
-        await this._persist("user", text);
+    clearSearch() {
+        this.state.searchQuery = "";
+        this.state.searchResults = [];
+    }
 
-        const tables = [];
-        let answer = "";
+    async openSearchResult(convId) {
+        this.clearSearch();
+        await this.switchConv(convId);
+    }
+
+    async _refreshPendingStatuses() {
+        const conv = this.activeConv;
+        if (!conv) return;
+        const pendingMsgs = (conv.messages || []).filter(m => m.type === "pending" && m.status === "pending");
+        if (!pendingMsgs.length) return;
         try {
-            const resp = await fetch(CHAT_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    message: text,
-                    session_key: `odoo:conv:${conv.id}`,
-                    profile_id: this.props.profileId || "",
-                }),
-                signal: this._abortCtrl.signal,
-            });
-            if (!resp.ok) throw new Error(`${resp.status}`);
-            const reader = resp.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop();
-                for (const line of lines) {
-                    if (!line.startsWith("data: ")) continue;
-                    const data = line.slice(6);
-                    if (data === "[DONE]") continue;
-                    const event = JSON.parse(data);
-                    if (event.type === "progress") {
-                        if (!String(event.content).startsWith("Tokens:")) {
-                            this.state.liveSteps.push(event.content);
-                        }
-                    } else if (event.type === "response") {
-                        answer = event.content;
-                        conv.messages.push({
-                            text: event.content, role: "assistant",
-                            steps: [...this.state.liveSteps],
-                            tools: _toolsFromSteps(this.state.liveSteps),
-                        });
-                    } else if (event.type === "artifact" && event.artifact_type === "table") {
-                        const t = {
-                            artifact_type: "table",
-                            title: event.title, columns: event.columns, rows: event.rows,
-                        };
-                        tables.push(t);
-                        conv.messages.push({
-                            role: "assistant", type: "table",
-                            title: event.title, columns: event.columns, rows: event.rows,
-                        });
-                    }
+            const res = await this._pendingRpc("list", { conversation_id: conv.id });
+            const byId = {};
+            for (const row of res?.actions || []) byId[row.id] = row;
+            for (const msg of pendingMsgs) {
+                const row = byId[msg.actionId];
+                if (row && row.status !== "pending") {
+                    msg.status = row.status;
+                    msg.result = row.result || "";
+                    msg.error = row.error || "";
                 }
             }
-            if (answer) await this._persist("assistant", answer, "", JSON.stringify(this.state.liveSteps));
-            for (const t of tables) await this._persist("assistant", "", JSON.stringify([t]));
-        } catch (e) {
-            if (e.name === "AbortError") {
-                const note = "Cancelled by user.";
-                conv.messages.push({ text: note, role: "error" });
-                await this._persist("error", note);
-            } else {
-                conv.messages.push({ text: `Error: ${e.message}`, role: "error" });
-                await this._persist("error", `Error: ${e.message}`);
-            }
-        } finally {
-            this.state.loading = false;
-            this.state.liveSteps = [];
-            this._abortCtrl = null;
+        } catch {
+            // best effort; will retry on next tick
         }
+    }
+
+    async exportConv(id) {
+        try {
+            const res = await this._rpc("export", { id });
+            if (!res?.ok) return;
+            const blob = new Blob([res.markdown], { type: "text/markdown" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = res.filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            // best effort
+        }
+    }
+
+    onSend() {
+        if (!this.state.input.trim() || !this.activeConv) return;
+        const conv = this.activeConv;
+        if (chatService.isBusy(conv.id)) return;
+        const text = this.state.input.trim();
+        conv.messages.push({ text, role: "user" });
+        this.state.input = "";
+        this.state.liveSteps = [];
+        this._handledStatus.delete(conv.id);
+        // fire and forget; subscriber callback drives UI updates
+        chatService.start(conv.id, text, this.props.profileId);
     }
 
     cancelSend() {
-        if (this._abortCtrl) this._abortCtrl.abort();
+        if (this.state.activeId) chatService.abort(this.state.activeId);
     }
 
     serversFromTools(tools) {

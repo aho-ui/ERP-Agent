@@ -8,6 +8,7 @@ from nanobot.agent.tools.base import Tool
 
 from backend.parsing import parse_agent_response
 from backend.agents.registry import AgentRegistry
+from backend.tool_meta import WRITE_TOOLS_PREFIXED
 
 _TOOL_TIMEOUT = 60
 
@@ -39,8 +40,17 @@ class ProgressEmitter:
     def tool_result(self, agent_name: str, tool_name: str, preview: str) -> None:
         self._emit(f"[{agent_name}] <- {tool_name}: {preview}")
 
-    def tokens(self, prompt: int, completion: int) -> None:
-        self._emit(f"Tokens: {prompt} prompt / {completion} completion / {prompt + completion} total")
+    def tokens(self, prompt: int, completion: int, model: str = "") -> None:
+        suffix = f" | model: {model}" if model else ""
+        self._emit(f"Tokens: {prompt} prompt / {completion} completion / {prompt + completion} total{suffix}")
+
+    def pending_action(self, tool_name: str, payload: dict) -> None:
+        if self.q:
+            self.q.put_nowait({
+                "type": "pending_action",
+                "tool_name": tool_name,
+                "payload": payload,
+            })
 
 
 def _normalize_tool_calls(tool_calls) -> list[dict]:
@@ -67,16 +77,18 @@ class SubAgentRunner:
     async def run(self, template: dict, filtered_tools: dict, task: str) -> str:
         agent_name = template["name"]
         tool_defs = [tool.to_schema() for tool in filtered_tools.values()]
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": template["system_prompt"]},
-            {"role": "user", "content": task},
-        ]
-        self._emitter.dispatch_start(agent_name)
 
         ctx = _main().get_context()
         active = ctx.profile or {}
         model = active.get("model") or self._model
         api_key = active.get("api_key") or None
+        system_prompt = (ctx.system_prompt_override or "").strip() or template["system_prompt"]
+
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": task},
+        ]
+        self._emitter.dispatch_start(agent_name)
 
         final_text = "Task completed with no output."
         total_prompt = 0
@@ -127,7 +139,7 @@ class SubAgentRunner:
                 })
 
         result = parse_agent_response(final_text, agent_name, task, self._q, fallback=final_text)
-        self._emitter.tokens(total_prompt, total_completion)
+        self._emitter.tokens(total_prompt, total_completion, model)
         return result.summary
 
     async def _handle_tool_call(self, tc, agent_name: str, filtered_tools: dict) -> str:
@@ -137,6 +149,18 @@ class SubAgentRunner:
         kwargs = json.loads(tc.function.arguments)
         logger.info(f"[sub-agent:{agent_name}] -> {tc.function.name}({tc.function.arguments})")
         self._emitter.tool_call(agent_name, tc.function.name, kwargs)
+
+        ctx = _main().get_context()
+        if tc.function.name in WRITE_TOOLS_PREFIXED and not ctx.is_admin:
+            self._emitter.pending_action(tc.function.name, kwargs)
+            queued = (
+                f"QUEUED: {tc.function.name} is pending admin approval. "
+                "Do not retry; tell the user what you proposed and that an admin must approve it."
+            )
+            logger.info(f"[sub-agent:{agent_name}] <- {tc.function.name}: queued for admin approval")
+            self._emitter.tool_result(agent_name, tc.function.name, "queued for admin approval")
+            return queued
+
         try:
             result = await asyncio.wait_for(tool.execute(**kwargs), timeout=_TOOL_TIMEOUT)
         except asyncio.TimeoutError:
