@@ -1,9 +1,11 @@
 import asyncio
+import time
 
 from loguru import logger
 from nanobot.agent.loop import AgentLoop
 from nanobot.bus.queue import MessageBus
 from nanobot.providers.litellm_provider import LiteLLMProvider
+from nanobot.session.manager import SessionManager as _SessionManager
 
 from backend.config.loader import load
 from backend.agents.dispatch import DispatchTool
@@ -11,6 +13,22 @@ from backend.agents.main import (
     AgentContext, get_context, set_context, _task_queues,
 )
 from backend.mcp import SERVERS
+
+# Windows file-lock retry for nanobot's per-session jsonl saves.
+# Antivirus (or transient FS locks) can briefly hold the newly-created file
+# and block the next write within the same task. Retry with short backoff.
+_orig_session_save = _SessionManager.save
+
+def _session_save_retry(self, session):
+    for attempt in range(5):
+        try:
+            return _orig_session_save(self, session)
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+
+_SessionManager.save = _session_save_retry
 
 __all__ = [
     "AgentContext", "get_context", "set_context", "_task_queues",
@@ -74,7 +92,7 @@ def wrap_mcp_tools(loop: AgentLoop) -> None:
     from backend.agents.main import get_context as _get_ctx
 
     for name in list(loop.tools.tool_names):
-        if not name.startswith("mcp_odoo_"):
+        if not name.startswith("mcp_odoo_") or name == "mcp_odoo_health":
             continue
         tool = loop.tools.get(name)
         if tool is None or getattr(tool, "_erp_wrapped", False):
@@ -87,10 +105,18 @@ def wrap_mcp_tools(loop: AgentLoop) -> None:
             uid = ctx.user_id
             if uid is None:
                 return _json.dumps({"error": "no user context for mcp_odoo call"})
-            kwargs["_auth_token"] = _sign({"uid": uid, "op": __op})
+            kwargs["auth_token"] = _sign({"uid": uid, "op": __op})
             return await __orig(**kwargs)
 
         tool.execute = _wrapped
+        params = dict(tool._parameters or {})
+        props = dict(params.get("properties", {}))
+        if "auth_token" in props:
+            del props["auth_token"]
+            params["properties"] = props
+            if "required" in params:
+                params["required"] = [r for r in params["required"] if r != "auth_token"]
+            tool._parameters = params
         tool._erp_wrapped = True
         logger.info(f"[agent_loop] wrapped {name} with gateway token injection")
 

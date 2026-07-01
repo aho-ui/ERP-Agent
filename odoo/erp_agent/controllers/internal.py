@@ -1,57 +1,17 @@
-import ast
 import json
 import logging
-from pathlib import Path
 
 from werkzeug.wrappers import Response
 
-from odoo import http
+from odoo import http, models
 from odoo.http import request
 
 from ._helpers import _ensure_path
 
 _logger = logging.getLogger(__name__)
 
-_BASE_OPS = {("ir.model", "search")}
-_MCP_SOURCE = Path(__file__).resolve().parent.parent / "backend" / "mcp_servers" / "odoo.py"
-
-
-def _load_allowlist() -> dict:
-    out: dict = {}
-    try:
-        tree = ast.parse(_MCP_SOURCE.read_text(encoding="utf-8"))
-    except Exception:
-        _logger.exception("[internal] failed to parse %s for allowlist", _MCP_SOURCE)
-        return out
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef):
-            continue
-        is_tool = any(
-            isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr == "tool"
-            for d in node.decorator_list
-        )
-        if not is_tool:
-            continue
-        ops: set = set(_BASE_OPS)
-        declared = False
-        for d in node.decorator_list:
-            if not (isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "needs"):
-                continue
-            if not d.args or not isinstance(d.args[0], (ast.List, ast.Tuple)):
-                continue
-            for elt in d.args[0].elts:
-                if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
-                    continue
-                m, mth = elt.elts
-                if isinstance(m, ast.Constant) and isinstance(mth, ast.Constant):
-                    ops.add((m.value, mth.value))
-                    declared = True
-        if declared:
-            out[node.name] = ops
-    return out
-
-
-_TOOL_ALLOWED_OPS = _load_allowlist()
+_ensure_path()
+from backend.tool_meta import TOOL_ALLOWED_OPS as _TOOL_ALLOWED_OPS
 
 
 def _err(msg, status=400):
@@ -59,6 +19,45 @@ def _err(msg, status=400):
 
 
 class InternalController(http.Controller):
+
+    @http.route("/erp_agent/internal/seed_products", type="http", auth="user",
+                methods=["GET"], csrf=False)
+    def seed_products(self, **kw):
+        if not request.env.user.has_group("base.group_system"):
+            return Response(json.dumps({"error": "admin only"}), status=403, mimetype="application/json")
+        Product = request.env["product.product"].sudo()
+        existing = Product.search_count([])
+        if existing:
+            return Response(
+                json.dumps({"ok": True, "created": 0, "existing": existing}),
+                mimetype="application/json",
+            )
+        seed = [
+            {"name": "Demo Widget", "list_price": 19.99, "standard_price": 7.5, "type": "consu"},
+            {"name": "Demo Gadget", "list_price": 49.00, "standard_price": 22.0, "type": "consu"},
+        ]
+        created = Product.create(seed)
+        return Response(
+            json.dumps({"ok": True, "created": len(created), "ids": created.ids}),
+            mimetype="application/json",
+        )
+
+    @http.route("/erp_agent/internal/health", type="http", auth="public",
+                methods=["GET"], csrf=False)
+    def health(self, **kw):
+        try:
+            request.env["ir.model"].sudo().search([], limit=1)
+        except Exception as e:
+            _logger.exception("[internal] health probe failed")
+            return Response(
+                json.dumps({"status": "DOWN", "reason": f"db query failed: {type(e).__name__}"}),
+                status=503,
+                mimetype="application/json",
+            )
+        return Response(
+            json.dumps({"status": "UP", "reason": "ok"}),
+            mimetype="application/json",
+        )
 
     @http.route("/erp_agent/internal/execute", type="http", auth="public",
                 methods=["POST"], csrf=False)
@@ -97,13 +96,23 @@ class InternalController(http.Controller):
         try:
             env = request.env(user=int(uid))
             recordset = env[model]
-            fn = getattr(recordset, method, None)
-            if fn is None or not callable(fn):
+            if not hasattr(recordset, method):
                 return _err(f"unknown method: {model}.{method}", 400)
-            result = fn(*args, **kwargs)
+            # Mimic Odoo's execute_kw: if first positional arg looks like a list of ids,
+            # browse them and dispatch the method on the resulting recordset.
+            if args and isinstance(args[0], list) and args[0] and all(isinstance(x, int) and not isinstance(x, bool) for x in args[0]):
+                target = env[model].browse(args[0])
+                fn = getattr(target, method)
+                result = fn(*args[1:], **kwargs)
+            else:
+                fn = getattr(recordset, method)
+                result = fn(*args, **kwargs)
         except Exception:
             _logger.exception("[internal] %s.%s failed", model, method)
             return _err("execution failed", 500)
+
+        if isinstance(result, models.BaseModel):
+            result = result.id if len(result) == 1 else result.ids
 
         return Response(
             json.dumps({"result": result}, default=str),

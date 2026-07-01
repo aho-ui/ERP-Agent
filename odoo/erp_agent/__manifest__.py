@@ -4,7 +4,7 @@
     "summary": "AI Assistant",
     "installable": True,
     "application": True,
-    "depends": ["web"],
+    "depends": ["web", "sale_management", "purchase", "account"],
     "external_dependencies": {
         "python": [
             "django",
@@ -32,6 +32,7 @@
             "erp_agent/static/src/components/AgentSettings/AgentSettings.js",
             "erp_agent/static/src/components/AgentSettings/AgentSettings.xml",
             "erp_agent/static/src/components/AgentSettings/AgentSettings.scss",
+            "erp_agent/static/src/components/ErpAgentChat/chatService.js",
             "erp_agent/static/src/components/ErpAgentChat/ErpAgentChat.js",
             "erp_agent/static/src/components/ErpAgentChat/ErpAgentChat.xml",
             "erp_agent/static/src/components/ErpAgentChat/ErpAgentChat.scss",

@@ -34,7 +34,7 @@ def health() -> str:
         conn = get_conn()
         conn.execute("SELECT 1 FROM customers LIMIT 1")
         conn.close()
-        return json.dumps({"status": "UP", "reason": "connected"})
+        return json.dumps({"status": "UP", "reason": "ok"})
     except Exception as e:
         return json.dumps({"status": "DOWN", "reason": str(e)})
 
@@ -172,7 +172,7 @@ def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str
         [name, partner_id, customer["name"], amount],
     )
     conn.commit()
-    return json.dumps({"order_id": cur.lastrowid})
+    return json.dumps({"id": cur.lastrowid, "kind": "sales_order"})
 
 
 @mcp.tool()
@@ -192,7 +192,7 @@ def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> s
         [name, vendor_id, vendor["name"], amount],
     )
     conn.commit()
-    return json.dumps({"order_id": cur.lastrowid})
+    return json.dumps({"id": cur.lastrowid, "kind": "purchase_order"})
 
 
 @mcp.tool()
@@ -209,7 +209,7 @@ def create_customer_invoice(partner_id: int, product_id: int, quantity: float, p
         [name, partner_id, customer["name"], amount],
     )
     conn.commit()
-    return json.dumps({"invoice_id": cur.lastrowid})
+    return json.dumps({"id": cur.lastrowid, "kind": "customer_invoice"})
 
 
 @mcp.tool()
@@ -226,7 +226,7 @@ def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_u
         [name, vendor_id, vendor["name"], amount],
     )
     conn.commit()
-    return json.dumps({"bill_id": cur.lastrowid})
+    return json.dumps({"id": cur.lastrowid, "kind": "vendor_bill"})
 
 
 @mcp.tool()
@@ -237,7 +237,7 @@ def confirm_sales_order(order_id: int) -> str:
         return json.dumps({"error": f"Order {order_id} not found"})
     conn.execute("UPDATE sales_orders SET state = ? WHERE id = ?", ["confirmed", order_id])
     conn.commit()
-    return json.dumps({"order_id": order_id, "name": order["name"], "state": "confirmed"})
+    return json.dumps({"id": order_id, "kind": "sales_order", "name": order["name"], "state": "confirmed"})
 
 
 @mcp.tool()
@@ -250,10 +250,10 @@ def register_payment(invoice_id: int, amount: float) -> str:
             return json.dumps({"error": f"Invoice/bill {invoice_id} not found"})
         conn.execute("UPDATE vendor_bills SET payment_state = ? WHERE id = ?", ["paid", invoice_id])
         conn.commit()
-        return json.dumps({"payment_id": invoice_id, "amount": amount, "status": "paid"})
+        return json.dumps({"id": invoice_id, "kind": "bill", "payment_state": "paid", "amount": amount})
     conn.execute("UPDATE invoices SET payment_state = ? WHERE id = ?", ["paid", invoice_id])
     conn.commit()
-    return json.dumps({"payment_id": invoice_id, "amount": amount, "status": "paid"})
+    return json.dumps({"id": invoice_id, "kind": "invoice", "payment_state": "paid", "amount": amount})
 
 
 @mcp.tool()
@@ -272,7 +272,7 @@ def update_sales_order(order_id: int, partner_id: int = None, notes: str = None)
     params.append(order_id)
     conn.execute(f"UPDATE sales_orders SET {', '.join(updates)} WHERE id = ?", params)
     conn.commit()
-    return json.dumps({"order_id": order_id, "updated_fields": [u.split(" ")[0] for u in updates]})
+    return json.dumps({"id": order_id, "kind": "sales_order", "updated_fields": [u.split(" ")[0] for u in updates]})
 
 
 @mcp.tool()
@@ -291,7 +291,7 @@ def update_purchase_order(order_id: int, partner_id: int = None, notes: str = No
     params.append(order_id)
     conn.execute(f"UPDATE purchase_orders SET {', '.join(updates)} WHERE id = ?", params)
     conn.commit()
-    return json.dumps({"order_id": order_id, "updated_fields": [u.split(" ")[0] for u in updates]})
+    return json.dumps({"id": order_id, "kind": "purchase_order", "updated_fields": [u.split(" ")[0] for u in updates]})
 
 
 @mcp.tool()
@@ -310,7 +310,7 @@ def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -
     params.append(invoice_id)
     conn.execute(f"UPDATE invoices SET {', '.join(updates)} WHERE id = ?", params)
     conn.commit()
-    return json.dumps({"invoice_id": invoice_id, "updated_fields": [u.split(" ")[0] for u in updates]})
+    return json.dumps({"id": invoice_id, "kind": "invoice", "updated_fields": [u.split(" ")[0] for u in updates]})
 
 
 @mcp.tool()

@@ -1,5 +1,6 @@
 import contextvars
 import functools
+import inspect
 import json
 import os
 import urllib.error
@@ -11,6 +12,7 @@ EXEC_URL = os.environ.get(
     "ERP_AGENT_EXEC_URL",
     "http://localhost:8069/erp_agent/internal/execute",
 )
+HEALTH_URL = EXEC_URL.replace("/internal/execute", "/internal/health")
 
 mcp = FastMCP("odoo")
 
@@ -21,17 +23,26 @@ _token: contextvars.ContextVar[str | None] = contextvars.ContextVar("mcp_odoo_to
 
 @mcp.tool()
 def health() -> str:
+    req = urllib.request.Request(HEALTH_URL, method="GET")
     try:
-        # cheap reachability probe — POST without a body returns 400, GET returns 405,
-        # either response proves the daemon route is up
-        req = urllib.request.Request(EXEC_URL, method="GET")
+        with urllib.request.urlopen(req, timeout=5) as r:
+            body = r.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
         try:
-            urllib.request.urlopen(req, timeout=5)
-        except urllib.error.HTTPError:
-            pass
-        return json.dumps({"status": "UP", "reason": "connected"})
+            data = json.loads(e.read().decode("utf-8"))
+            return json.dumps({"status": "DOWN", "reason": data.get("reason", f"HTTP {e.code}")})
+        except Exception:
+            return json.dumps({"status": "DOWN", "reason": f"HTTP {e.code}"})
     except Exception as e:
-        return json.dumps({"status": "DOWN", "reason": str(e)})
+        return json.dumps({"status": "DOWN", "reason": f"{type(e).__name__}: {e}"})
+    try:
+        data = json.loads(body)
+    except Exception:
+        return json.dumps({"status": "DOWN", "reason": "malformed health response"})
+    return json.dumps({
+        "status": data.get("status", "DOWN"),
+        "reason": data.get("reason", ""),
+    })
 
 
 def _exec(model: str, method: str, args=None, kwargs=None):
@@ -98,11 +109,11 @@ def _missing(model: str) -> str:
     })
 
 
-def needs(ops: list[tuple[str, str]]):
+def needs(ops: list[tuple[str, str]], write: bool = False):
     def deco(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            token = kwargs.pop("_auth_token", None)
+            token = kwargs.pop("auth_token", None)
             if not token:
                 return json.dumps({
                     "error": "missing auth token (chat must be initiated through Odoo controller)"
@@ -112,6 +123,12 @@ def needs(ops: list[tuple[str, str]]):
                 if not _model_exists(m):
                     return _missing(m)
             return fn(*args, **kwargs)
+        sig = inspect.signature(fn)
+        wrapper.__signature__ = sig.replace(parameters=[
+            *sig.parameters.values(),
+            inspect.Parameter("auth_token", inspect.Parameter.KEYWORD_ONLY, default="", annotation=str),
+        ])
+        wrapper._needs_write = write
         return wrapper
     return deco
 
@@ -207,7 +224,7 @@ def get_vendor_bills(limit: int = 10, search: str = "", id: int = 0) -> str:
 
 
 @mcp.tool()
-@needs([("product.product", "read"), ("sale.order", "create"), ("sale.order.line", "create")])
+@needs([("product.product", "read"), ("sale.order", "create"), ("sale.order.line", "create")], write=True)
 def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str:
     product = _exec("product.product", "read", [[product_id]], {"fields": ["list_price"]})[0]
     order_id = _exec("sale.order", "create", [{"partner_id": partner_id}])
@@ -217,11 +234,11 @@ def create_sales_order(partner_id: int, product_id: int, quantity: float) -> str
         "product_uom_qty": quantity,
         "price_unit": product["list_price"],
     }])
-    return json.dumps({"order_id": order_id})
+    return json.dumps({"id": order_id, "kind": "sales_order"})
 
 
 @mcp.tool()
-@needs([("product.product", "read"), ("purchase.order", "create"), ("purchase.order.line", "create"), ("purchase.order", "button_confirm")])
+@needs([("product.product", "read"), ("purchase.order", "create"), ("purchase.order.line", "create"), ("purchase.order", "button_confirm")], write=True)
 def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> str:
     product = _exec("product.product", "read", [[product_id]], {"fields": ["standard_price"]})[0]
     order_id = _exec("purchase.order", "create", [{"partner_id": vendor_id}])
@@ -232,11 +249,11 @@ def create_purchase_order(vendor_id: int, product_id: int, quantity: float) -> s
         "price_unit": product["standard_price"],
     }])
     _exec("purchase.order", "button_confirm", [[order_id]])
-    return json.dumps({"order_id": order_id})
+    return json.dumps({"id": order_id, "kind": "purchase_order"})
 
 
 @mcp.tool()
-@needs([("product.product", "read"), ("account.move", "create"), ("account.move", "action_post")])
+@needs([("product.product", "read"), ("account.move", "create"), ("account.move", "action_post")], write=True)
 def create_customer_invoice(partner_id: int, product_id: int, quantity: float, price_unit: float) -> str:
     product = _exec("product.product", "read", [[product_id]], {"fields": ["name"]})[0]
     invoice_id = _exec("account.move", "create", [{
@@ -249,11 +266,11 @@ def create_customer_invoice(partner_id: int, product_id: int, quantity: float, p
         })],
     }])
     _exec("account.move", "action_post", [[invoice_id]])
-    return json.dumps({"invoice_id": invoice_id})
+    return json.dumps({"id": invoice_id, "kind": "customer_invoice"})
 
 
 @mcp.tool()
-@needs([("product.product", "read"), ("account.move", "create"), ("account.move", "action_post")])
+@needs([("product.product", "read"), ("account.move", "create"), ("account.move", "action_post")], write=True)
 def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_unit: float) -> str:
     product = _exec("product.product", "read", [[product_id]], {"fields": ["name"]})[0]
     bill_id = _exec("account.move", "create", [{
@@ -266,19 +283,19 @@ def create_vendor_bill(vendor_id: int, product_id: int, quantity: float, price_u
         })],
     }])
     _exec("account.move", "action_post", [[bill_id]])
-    return json.dumps({"bill_id": bill_id})
+    return json.dumps({"id": bill_id, "kind": "vendor_bill"})
 
 
 @mcp.tool()
-@needs([("sale.order", "button_confirm"), ("sale.order", "read")])
+@needs([("sale.order", "button_confirm"), ("sale.order", "read")], write=True)
 def confirm_sales_order(order_id: int) -> str:
     _exec("sale.order", "button_confirm", [[order_id]])
     order = _exec("sale.order", "read", [[order_id]], {"fields": ["id", "name", "state"]})[0]
-    return json.dumps({"order_id": order_id, "name": order["name"], "state": order["state"]})
+    return json.dumps({"id": order_id, "kind": "sales_order", "name": order["name"], "state": order["state"]})
 
 
 @mcp.tool()
-@needs([("account.move", "read"), ("account.payment", "create"), ("account.payment", "action_post")])
+@needs([("account.move", "read"), ("account.payment", "create"), ("account.payment", "action_post")], write=True)
 def register_payment(invoice_id: int, amount: float) -> str:
     invoice = _exec("account.move", "read", [[invoice_id]], {"fields": ["id", "partner_id", "move_type"]})[0]
     if invoice["move_type"] not in ("in_invoice", "out_invoice"):
@@ -291,11 +308,11 @@ def register_payment(invoice_id: int, amount: float) -> str:
         "partner_type": "vendor" if is_outbound else "customer",
     }])
     _exec("account.payment", "action_post", [[payment_id]])
-    return json.dumps({"payment_id": payment_id, "amount": amount})
+    return json.dumps({"id": payment_id, "kind": "payment", "amount": amount})
 
 
 @mcp.tool()
-@needs([("sale.order", "write")])
+@needs([("sale.order", "write")], write=True)
 def update_sales_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
     updates = {}
     if partner_id is not None:
@@ -305,11 +322,11 @@ def update_sales_order(order_id: int, partner_id: int = None, notes: str = None)
     if not updates:
         return json.dumps({"error": "No fields to update"})
     _exec("sale.order", "write", [[order_id], updates])
-    return json.dumps({"order_id": order_id, "updated_fields": list(updates.keys())})
+    return json.dumps({"id": order_id, "kind": "sales_order", "updated_fields": list(updates.keys())})
 
 
 @mcp.tool()
-@needs([("purchase.order", "write")])
+@needs([("purchase.order", "write")], write=True)
 def update_purchase_order(order_id: int, partner_id: int = None, notes: str = None) -> str:
     updates = {}
     if partner_id is not None:
@@ -319,11 +336,11 @@ def update_purchase_order(order_id: int, partner_id: int = None, notes: str = No
     if not updates:
         return json.dumps({"error": "No fields to update"})
     _exec("purchase.order", "write", [[order_id], updates])
-    return json.dumps({"order_id": order_id, "updated_fields": list(updates.keys())})
+    return json.dumps({"id": order_id, "kind": "purchase_order", "updated_fields": list(updates.keys())})
 
 
 @mcp.tool()
-@needs([("account.move", "write")])
+@needs([("account.move", "write")], write=True)
 def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -> str:
     updates = {}
     if partner_id is not None:
@@ -333,7 +350,7 @@ def update_invoice(invoice_id: int, partner_id: int = None, notes: str = None) -
     if not updates:
         return json.dumps({"error": "No fields to update"})
     _exec("account.move", "write", [[invoice_id], updates])
-    return json.dumps({"invoice_id": invoice_id, "updated_fields": list(updates.keys())})
+    return json.dumps({"id": invoice_id, "kind": "invoice", "updated_fields": list(updates.keys())})
 
 
 @mcp.tool()

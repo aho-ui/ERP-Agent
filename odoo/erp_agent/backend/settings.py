@@ -1,4 +1,5 @@
 import os
+import secrets
 import sys
 import tempfile
 from pathlib import Path
@@ -15,7 +16,7 @@ except Exception:
     _DATA_DIR = Path(tempfile.gettempdir()) / "erp_agent"
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-SECRET_KEY = "erp-agent-slim-backend-key"
+SECRET_KEY = os.environ.get("AGENT_DJANGO_SECRET") or secrets.token_urlsafe(32)
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
